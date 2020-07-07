@@ -234,6 +234,9 @@ class ContractData(BaseData):
     product: Product
     size: int
     pricetick: float
+    address: str = ""
+    decimals: int = 18
+    tokenId: int = 0
 
     min_volume: float = 1           # minimum trading volume of the contract
     stop_supported: bool = False    # whether server supports stop order
