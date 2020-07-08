@@ -8,7 +8,7 @@
 
 ## 说明
 
-这是为路印交易所[LoopringDEX](https://loopring.io)流动性挖矿定制的vn.py。
+这是为路印交易所[LoopringDEX](https://loopring.io)流动性挖矿深度定制的vn.py。
 
 vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1月正式发布，在开源社区6年持续不断的贡献下一步步成长为全功能量化交易平台，目前国内外金融机构用户已经超过500家，包括：私募基金、证券自营和资管、期货资管和子公司、高校研究机构、自营交易公司、交易所、Token Fund等。
 
@@ -18,9 +18,7 @@ vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1�
 
 ## 安装及运行
 
-1. 安装请参考VNPY的说明。
-
-2. 编辑`example/no_ui/run.py`，指定参数。账户参数需要从路印交易所[LoopringDEX](https://loopring.io)获取，关于如何开通账户请参考路印交易所文档[https://docs.loopring.io/en/](https://docs.loopring.io/en/)
+1. 编辑`example/no_ui/run.py`，指定参数。账户参数需要从路印交易所[LoopringDEX](https://loopring.io)获取，关于如何开通账户请参考路印交易所文档[https://docs.loopring.io/en/](https://docs.loopring.io/en/)
 
    ```python
    SETTINGS["log.console"] = True	#是否输出日志到屏幕
@@ -53,10 +51,11 @@ vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1�
    }
    ```
 
-3. cd run_liquid_mining and run `python ../example/no_ui/run.py`。
+2. 根目录运行`docker build -t vnpy:v1 .`，然后运行`docker run -it vnpy bash`进入Docker镜像命令行。
+
+3. 在docker容器命令行下输入：`cd run_liquid_mining` 然后运行 `python ../example/no_ui/run.py`。
 
 4. 可以从日志看到实时的下单，也可以从交易所订单页面观察即时的流动性挖矿奖励。
-
 
 
 ## 补充说明
