@@ -8,7 +8,7 @@
 
 ## 说明
 
-这是为路印交易所[LoopringDEX](https://loopring.io)流动性挖矿深度定制的vn.py。
+这是为路印交易所[LoopringDEX](https://loopring.io)流动性挖矿深度定制的vn.py，精简了大部分核心功能无关的代码，专注于流动性挖矿。
 
 vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1月正式发布，在开源社区6年持续不断的贡献下一步步成长为全功能量化交易平台，目前国内外金融机构用户已经超过500家，包括：私募基金、证券自营和资管、期货资管和子公司、高校研究机构、自营交易公司、交易所、Token Fund等。
 
@@ -21,7 +21,7 @@ vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1�
 1. 编辑`example/no_ui/run.py`，指定参数。账户参数需要从路印交易所[LoopringDEX](https://loopring.io)获取，关于如何开通账户请参考路印交易所文档[https://docs.loopring.io/en/](https://docs.loopring.io/en/)
 
    ```python
-   SETTINGS["log.console"] = True	#是否输出日志到屏幕
+   SETTINGS["log.console"] = True	#是否输出日志到屏幕，默认为输出
    
    #账户参数
    loopring_dex_setting = {
@@ -60,8 +60,7 @@ vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1�
 
 ## 补充说明
 
-有关vn.py的详细信息，请访问[VNPY]([www.vnpy.com](http://www.vnpy.com/))
-
+有关vn.py的详细信息，请访问[VNPY项目主页](http://www.vnpy.com/)
 
 
 ## 联系方式
