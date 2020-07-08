@@ -13,7 +13,7 @@ $python -m pip install --upgrade pip setuptools wheel
 function install-ta-lib()
 {
     pushd /tmp
-    wget https://pip.vnpy.com/colletion/ta-lib-0.4.0-src.tar.gz
+    wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
     tar -xf ta-lib-0.4.0-src.tar.gz
     cd ta-lib
     ./configure --prefix=$prefix
@@ -41,4 +41,4 @@ $python -m pip install -r requirements.txt
 locale-gen zh_CN.GB18030
 
 # Install vn.py
-$python -m pip install . $@
+#$python -m pip install . $@
