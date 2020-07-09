@@ -1,4 +1,4 @@
-# 路印协议流动性挖坑定制化VNPY
+# 路印协议流动性挖矿定制化VNPY
 
 <p align="center">
 
