@@ -29,12 +29,12 @@ vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1�
        "exchangeName": "LoopringDEX: Beta 1",
        "exchangeAddress": "0x944644Ea989Ec64c2Ab9eF341D383cEf586A5777",
        "exchangeId": 2,
-       "address": "", 		# address
-       "accountId": 0,		# account ID
-       "key": "",   		# API key
-       "publicKeyX": "", 	# Public Key X
-       "publicKeyY": "",	# Public Key X
-       "secret": "",		# Secret Key, KEEP IT SECRET!!!
+       "address": "",       # address
+       "accountId": 0,      # account ID
+       "key": "",           # API key
+       "publicKeyX": "",    # Public Key X
+       "publicKeyY": "",    # Public Key X
+       "secret": "",        # Secret Key, KEEP IT SECRET!!!
        "session_number": 3,
        "proxy_host": "",
        "proxy_port": ""
@@ -44,10 +44,10 @@ vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1�
    algo_trading_setting = {
        "template_name": "LiquidMiningAlgo", # 默认运行流动性挖矿
        "vt_symbol": "LRC-USDT.LOOPRING",    # {MINING_MARKET}.LOOPRING
-       "price_offset": 0.7,	# 和市场价的差距,这里是0.7%，通常流动性挖矿1%内都有奖励。
-       "price_tolerance": 0.3,	# 价格波动容忍度，0.7+/- 0.3 即 [0.4%, 1.0%]
-       "volume": 120,		# 单笔订单下单量
-       "interval": 15,		# 下单间隔时间
+       "price_offset": 0.7,                 # 和市场价的差距，这里是0.7%，通常流动性挖矿1%内都有奖励
+       "price_tolerance": 0.3,              # 市场价格波动容忍度，约等于订单价格在0.7+/-0.3范围内保持，超出重新下单
+       "volume": 120,                       # 单笔订单下单量
+       "interval": 15,                      # 下单间隔时间,以秒为单位
    }
    ```
 
