@@ -20,11 +20,14 @@ RUN conda update -y conda
 RUN python -m pip install pip --upgrade
 #RUN python -m pip install wheel
 
-# Copy files
+# Copy setup files
 RUN mkdir -p /home/miner/vnpy
-COPY . /home/miner/vnpy
-ENV PYTHONPATH=/home/miner/vnpy
+COPY install.sh /home/miner/vnpy/
+COPY requirements.txt /home/miner/vnpy/
 WORKDIR /home/miner/vnpy
 RUN ["bash", "install.sh"]
 
-CMD ["python", "../example/no_ui/run.py"]
+COPY . /home/miner/vnpy/
+ENV PYTHONPATH=/home/miner/vnpy
+WORKDIR /home/miner/vnpy/liguid_mining
+CMD ["python", "../examples/no_ui/run.py"]
