@@ -63,6 +63,8 @@ vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1�
 
 有关vn.py的详细信息，请访问[VNPY项目主页](http://www.vnpy.com/)
 
+有关流动性挖矿活动以及奖励计算方法，请查看[路印博客](https://blogs.loopring.org/market-making-competition-cn/)
+
 ## 联系方式
 
 * [exchange@loopring.io](mailto:exchange@loopring.io)
