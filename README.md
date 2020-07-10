@@ -45,7 +45,9 @@ vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1�
        "template_name": "LiquidMiningAlgo", # 默认运行流动性挖矿
        "vt_symbol": "LRC-USDT.LOOPRING",    # {MINING_MARKET}.LOOPRING
        "price_offset": 0.7,                 # 和市场价的差距，这里是0.7%，通常流动性挖矿1%内都有奖励
-       "price_tolerance": 0.3,              # 市场价格波动容忍度，约等于订单价格在0.7+/-0.3范围内保持，超出重新下单
+       "price_tolerance": 0.3,              # 市场价格波动容忍度，此处0.3等于将订单价格保持在市场价0.7%+/-0.3%范围，
+                                            # 即市场价上下0.4% ~ 1.0%的位置上。一旦市价变化，订单价格超出该范围则重新下单，
+                                            # 并将继续保持在新市场价格的0.4%~1.0%，推荐设置为price_offset的一半
        "volume": 120,                       # 单笔订单下单量
        "interval": 15,                      # 下单间隔时间,以秒为单位
    }

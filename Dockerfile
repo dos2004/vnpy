@@ -34,8 +34,10 @@ RUN rm Miniconda3-latest-Linux-x86_64.sh
 ENV PATH=/miniconda/bin:${PATH}
 RUN conda update -y conda
 
+# update pip, using aliyun mirror
+RUN pip config set global.index-url http://mirrors.aliyun.com/pypi/simple
+RUN pip config set install.trusted-host mirrors.aliyun.com
 
-# update pip
 RUN python -m pip install pip --upgrade
 #RUN python -m pip install wheel
 
