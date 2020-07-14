@@ -23,21 +23,18 @@ vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1�
    ```python
    SETTINGS["log.console"] = True	#是否输出日志到屏幕，默认为输出
    
-   #账户参数
+   #账户参数，从路印导出粘贴即可
    loopring_dex_setting = {
        "name" : "流动性挖矿账户",
        "exchangeName": "LoopringDEX: Beta 1",
        "exchangeAddress": "0x944644Ea989Ec64c2Ab9eF341D383cEf586A5777",
-       "exchangeId": 2,
-       "address": "",       # address
-       "accountId": 0,      # account ID
-       "key": "",           # API key
-       "publicKeyX": "",    # Public Key X
-       "publicKeyY": "",    # Public Key X
-       "secret": "",        # Secret Key, KEEP IT SECRET!!!
-       "session_number": 3,
-       "proxy_host": "",
-       "proxy_port": ""
+       "exchangeId": 2,       # exchange ID
+       "accountAddress": "1", # account address
+       "accountId": 1,        # account ID
+       "apiKey": "1",         # API key
+       "publicKeyX": "1",     # Public Key X
+       "publicKeyY": "1",     # Public Key Y
+       "privateKey": "1",     # Secret Key, KEEP IT SECRET!!!
    }
    
    #流动性挖矿算法参数

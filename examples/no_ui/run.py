@@ -23,19 +23,16 @@ SETTINGS["log.console"] = True
 
 
 loopring_dex_setting = {
-    "name" : "MM test",
+    "name" : "流动性挖矿账户",
     "exchangeName": "LoopringDEX: Beta 1",
     "exchangeAddress": "0x944644Ea989Ec64c2Ab9eF341D383cEf586A5777",
     "exchangeId": 2,
-    "address": "1",
+    "accountAddress": "1",
     "accountId": 1,
-    "key": "1",
+    "apiKey": "1",
     "publicKeyX": "1",
     "publicKeyY": "1",
-    "secret": "1",
-    "session_number": 3,
-    "proxy_host": "",
-    "proxy_port": ""
+    "privateKey": "1",
 }
 
 algo_trading_setting = {

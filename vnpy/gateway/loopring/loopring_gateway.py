@@ -130,12 +130,12 @@ class LoopringGateway(BaseGateway):
 
     def connect(self, setting: dict):
         """"""
-        key = setting["key"]
-        secret = setting["secret"]
-        session_number = setting["session_number"]
-        proxy_host = setting["proxy_host"]
-        proxy_port = setting["proxy_port"]
-        address = setting["address"]
+        key = setting["apiKey"]
+        secret = setting["privateKey"]
+        session_number = setting.get("session_number", 3)
+        proxy_host = setting.get("proxy_host", "")
+        proxy_port = setting.get("proxy_port", "")
+        address = setting["accountAddress"]
         accountId = setting["accountId"]
         exchangeId = setting.get("exchangeId", 1)
 
