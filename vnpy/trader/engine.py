@@ -222,11 +222,11 @@ class MainEngine:
         Make sure every gateway and app is closed properly before
         programme exit.
         """
-        # Stop event engine first to prevent new timer event.
-        self.event_engine.stop()
-
         for engine in self.engines.values():
             engine.close()
+
+        # Stop event engine first to prevent new timer event.
+        self.event_engine.stop()
 
         for gateway in self.gateways.values():
             gateway.close()

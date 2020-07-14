@@ -3,6 +3,8 @@ import multiprocessing
 from time import sleep
 from datetime import datetime, time
 from logging import INFO
+import sys
+import signal
 
 from vnpy.event import EventEngine
 from vnpy.trader.setting import SETTINGS
@@ -21,16 +23,16 @@ SETTINGS["log.console"] = True
 
 
 loopring_dex_setting = {
-    "name" : "Triangle Arbitrage account",
+    "name" : "MM test",
     "exchangeName": "LoopringDEX: Beta 1",
     "exchangeAddress": "0x944644Ea989Ec64c2Ab9eF341D383cEf586A5777",
     "exchangeId": 2,
-    "address": "",
-    "accountId": 0,
-    "key": "",
-    "publicKeyX": "",
-    "publicKeyY": "",
-    "secret": "",
+    "address": "1",
+    "accountId": 1,
+    "key": "1",
+    "publicKeyX": "1",
+    "publicKeyY": "1",
+    "secret": "1",
     "session_number": 3,
     "proxy_host": "",
     "proxy_port": ""
@@ -39,13 +41,22 @@ loopring_dex_setting = {
 algo_trading_setting = {
     "template_name": "LiquidMiningAlgo",
     "vt_symbol": "LRC-USDT.LOOPRING",
-    "price_offset": 0.5,
-    "price_tolerance": 0.4,
-    "volume": 400,
-    "interval": 30
+    "price_offset": 0.7,
+    "price_tolerance": 0.3,
+    "volume": 1000,
+    "interval": 30,
+    "min_order_level": 3,
+    "min_pos": -5000,
+    "max_pos": 5000
 }
 
 def run_child_algo():
+    def signal_handler(sig, frame):
+        print(f'VNPY gets SIG:{sig}, engine shuts down!')
+        main_engine.close()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
     """
     Running in the child process.
     """
@@ -68,7 +79,7 @@ def run_child_algo():
     algo_engine.init_engine()
     main_engine.write_log("ALGO策略初始化完成")
 
-    sleep(20)
+    sleep(30)
     algo_engine.start_algo(algo_trading_setting)
     main_engine.write_log(f"Algo [{algo_trading_setting['template_name']}] 启动")
 

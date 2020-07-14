@@ -143,6 +143,10 @@ class AlgoEngine(BaseEngine):
         for algo_name in list(self.algos.keys()):
             self.stop_algo(algo_name)
 
+    def close(self):
+        """"""
+        self.stop_all()
+
     def subscribe(self, algo: AlgoTemplate, vt_symbol: str):
         """"""
         contract = self.main_engine.get_contract(vt_symbol)
