@@ -809,12 +809,6 @@ class LoopringRestApi(RestClient):
         tokenSId = order_detail.get('tokenSId', None)
         if orderId is not None and tokenSId is not None:
             if newest_order_id != 0:
-                if orderId > newest_order_id:
-                    reuse_tokenS_orderIds = self.failed_orderId.get(tokenSId, [])
-                    if orderId not in reuse_tokenS_orderIds:
-                        reuse_tokenS_orderIds.append(orderId)
-                        self.failed_orderId[tokenSId] = reuse_tokenS_orderIds
-
                 self.orderId_manager.put_orderId(tokenSId, newest_order_id)
                 self.gateway.write_log(f"on_error_recover_orderId: updated orderid of {tokenSId} to {newest_order_id}")
             else:
