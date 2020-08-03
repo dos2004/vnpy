@@ -96,7 +96,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             # if ask_price_diff > price_tolerance:
             #     cancel_ask = True
             #     self.write_log(f"当前卖单{self.vt_ask_price} 超出目标价 {target_ask_price} {ask_price_diff:.3f}%，取消")
-            vt_ask_price = round_to(min_ask_price + 0.0001, self.pricetick)
+            vt_ask_price = round_to(min_ask_price + self.pricetick, self.pricetick)
             if self.vt_ask_price < vt_ask_price:
                 cancel_ask = True
                 self.write_log(f"当前卖单{self.vt_ask_price} 低于最新卖{self.min_order_level}价 {vt_ask_price}，取消")
@@ -114,7 +114,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             # if bid_price_diff > price_tolerance:
             #     cancel_bid = True
             #     self.write_log(f"当前买单{self.vt_bid_price} 超出目标价 {target_bid_price} {bid_price_diff:.3f}%，取消")
-            vt_bid_price = round_to(max_bid_price - 0.0001, self.pricetick)
+            vt_bid_price = round_to(max_bid_price - self.pricetick, self.pricetick)
             if self.vt_bid_price > vt_bid_price:
                 cancel_bid = True
                 self.write_log(f"当前买单{self.vt_bid_price} 高于最新买{self.min_order_level}价 {vt_bid_price}，取消")
@@ -144,7 +144,7 @@ class LiquidMiningAlgo(AlgoTemplate):
         if self.vt_ask_orderid == "":
             min_ask_price = getattr(self.last_tick, f"ask_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
             # vt_ask_price = round_to(market_price * ((100 + self.price_offset)/100), self.pricetick)
-            vt_ask_price = round_to(min_ask_price + 0.0001, self.pricetick)
+            vt_ask_price = round_to(min_ask_price + self.pricetick, self.pricetick)
             if vt_ask_price >= min_ask_price:
                 self.vt_ask_price = vt_ask_price
                 self.write_log(f"委托流动性挖矿卖单，价格：{self.vt_ask_price}, pricetick: {self.pricetick}")
@@ -153,7 +153,7 @@ class LiquidMiningAlgo(AlgoTemplate):
         if self.vt_bid_orderid == "":
             max_bid_price = getattr(self.last_tick, f"bid_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
             # vt_bid_price = round_to(market_price * ((100 - self.price_offset)/100), self.pricetick)
-            vt_bid_price = round_to(max_bid_price - 0.0001, self.pricetick)
+            vt_bid_price = round_to(max_bid_price - self.pricetick, self.pricetick)
             if vt_bid_price <= max_bid_price:
                 self.vt_bid_price = vt_bid_price
                 self.write_log(f"委托流动性挖矿买单，价格：{self.vt_bid_price}, pricetick: {self.pricetick}")
