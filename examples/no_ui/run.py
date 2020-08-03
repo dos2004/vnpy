@@ -76,7 +76,7 @@ def run_child_algo():
     algo_engine.init_engine()
     main_engine.write_log("ALGO策略初始化完成")
 
-    sleep(30)
+    sleep(50)
     algo_engine.start_algo(algo_trading_setting)
     main_engine.write_log(f"Algo [{algo_trading_setting['template_name']}] 启动")
 
