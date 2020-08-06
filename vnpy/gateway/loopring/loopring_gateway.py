@@ -163,7 +163,8 @@ class LoopringGateway(BaseGateway):
 
     def cancel_order(self, req: CancelRequest):
         """"""
-        self.rest_api.cancel_order(req)
+        if req.orderid in self.orders:
+            self.rest_api.cancel_order(req)
 
     def query_account(self):
         """"""
@@ -544,6 +545,7 @@ class LoopringRestApi(RestClient):
             "signatureRy": str(signedMessage.sig.R.y),
             "signatureS": str(signedMessage.sig.s),
             "clientOrderId": clientOrderId,
+            "orderType": "MAKER_ONLY"
         }
 
         # self.gateway.write_log(f"create new order {newOrder}")
@@ -1194,20 +1196,6 @@ class LoopringDataWebsocketApi(WebsocketClient):
                 "snapshot" : True,
             }
         )
-        # market trade
-        # subscribe_args.append(
-        #     {
-        #         "topic"  : "trade",
-        #         "market" : req.symbol,
-        #     }
-        # )
-        #ticker
-        # subscribe_args.append(
-        #     {
-        #         "topic"  : "ticker",
-        #         "market" : req.symbol,
-        #     }
-        # )
 
         # Create new connection
         channels = {
@@ -1221,7 +1209,7 @@ class LoopringDataWebsocketApi(WebsocketClient):
     def on_packet(self, packet):
         # self.gateway.write_log(f"行情on_packet {packet}")
         if packet == "ping":
-            self.gateway.write_log("行情send_pong")
+            self.gateway.write_log("send pong to srv")
             self._send_text("pong")
             return
 
