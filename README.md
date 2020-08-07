@@ -108,10 +108,13 @@ vn.py is a Python-based open source trading bot system development framework. It
 
 Edit example/no_ui/run.py, specify the parameters. The account parameters need to be obtained from Loopring DEX. For how to open an account, please refer to the Loopring Exchange documentation https://docs.loopring.io/en/
 
+
+  ```python
 SETTINGS [ "log.console" ] =  True 	#Whether to output the log to the screen, the default is output
 
 
-#Account  parameters, you can export and paste from Loopring loopring_dex_setting = {
+#Account  parameters, you can export and paste from 
+Loopring loopring_dex_setting = {
      "name" : " Liquid mining account" ,
      "exchangeName" : "LoopringDEX: Beta 1" ,
      "exchangeAddress" : "0x944644Ea989Ec64c2Ab9eF341D383cEf586A5777" ,
@@ -125,7 +128,8 @@ SETTINGS [ "log.console" ] =  True 	#Whether to output the log to the screen, th
 }
 
 
-#Liquidity  mining algorithm parameter algo_trading_setting = {
+#Liquidity  mining algorithm parameter 
+algo_trading_setting = {
      "template_name" : "LiquidMiningAlgo" , # Run liquidity mining by default
     
     "vt_symbol" : "LRC-USDT.LOOPRING" ,     # {MINING_MARKET}.LOOPRING
@@ -149,6 +153,8 @@ SETTINGS [ "log.console" ] =  True 	#Whether to output the log to the screen, th
     
     "max_pos" : 5000                       # The maximum position unit, that is, the number of LRC bought, if it is greater than this value, liquidity mining will stop 
 }
+```
+
 docker build --rm -t mining:latest .After running the root directory , there are two ways (equivalent) to start liquidity mining after success.
 
 a. Run directly on this machine docker run mining:latest.
@@ -167,9 +173,11 @@ For more information about vn.py, please visit the [VNPY project homepage](http:
 For liquidity mining activities and reward calculation methods, please check [Loopring Blog](https://loopring.org/#/post/loopring-exchange-liquidity-mining-competition).
 
 ## Contact information
-exchange@loopring.io
 
 * [exchange@loopring.io](mailto:exchange@loopring.io)
 
 * [Loopring Discord](https://discord.gg/KkYccYp)
+
+## License
+
 MIT
