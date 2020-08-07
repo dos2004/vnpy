@@ -106,7 +106,7 @@ vn.py is a Python-based open source trading bot system development framework. It
 
 ## Installation and operation
 
-Edit example/no_ui/run.py, specify the parameters. The account parameters need to be obtained from Loopring DEX. For how to open an account, please refer to the Loopring Exchange documentation https://docs.loopring.io/en/
+1. Edit example/no_ui/run.py, specify the parameters. The account parameters need to be obtained from Loopring DEX. For how to open an account, please refer to the Loopring Exchange documentation https://docs.loopring.io/en/
 
 
   ```python
@@ -155,15 +155,15 @@ algo_trading_setting = {
 }
 ```
 
-docker build --rm -t mining:latest .After running the root directory , there are two ways (equivalent) to start liquidity mining after success.
+2. docker build --rm -t mining:latest .After running the root directory , there are two ways (equivalent) to start liquidity mining after success.
 
-a. Run directly on this machine docker run mining:latest.
+   a. Run directly on this machine docker run mining:latest.
 
-b. Run docker run -it mining:latest bashinto the Docker image command line, and then run python ../example/no_ui/run.py.
+   b. Run docker run -it mining:latest bashinto the Docker image command line, and then run python ../example/no_ui/run.py.
 
-You can see the real-time order from the log, and you can see the instant liquidity mining rewards from the exchange order page.
+3. You can see the real-time order from the log, and you can see the instant liquidity mining rewards from the exchange order page.
 
-Ctrl+C ends the mirroring operation. Under normal circumstances, all orders will be cancelled when exiting. It is recommended to observe the log/exchange page to confirm to avoid accidents.
+4. Ctrl+C ends the mirroring operation. Under normal circumstances, all orders will be cancelled when exiting. It is recommended to observe the log/exchange page to confirm to avoid accidents.
 
 Note: After each run.py parameter change, you need to re-run step 2 to regenerate and run a new Docker image (very fast).
 
