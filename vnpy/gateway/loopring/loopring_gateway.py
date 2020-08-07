@@ -153,6 +153,12 @@ class LoopringGateway(BaseGateway):
             self.write_log(f"ERROR: already subscribed {len(self.subscribe_reqs)} sources {self.subscribe_reqs}")
             return
 
+        tokens = req.symbol.split('-')
+        for t in tokens:
+            assert t in self.rest_api.tokens
+            tokenId = self.rest_api.tokens[t].tokenId
+            self.rest_api.query_orderId(tokenId)
+
         self.trade_ws_apis[0].subscribe(req)
         self.market_ws_apis[0].subscribe(req)
         self.subscribe_reqs[req.symbol] = req
@@ -713,7 +719,6 @@ class LoopringRestApi(RestClient):
             )
             self.gateway.on_contract(contract)
             self.tokens[d['symbol']] = contract
-            self.query_orderId(d['tokenId'])
         self.gateway.write_log("start query_contract")
         self.query_contract()
 
