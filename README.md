@@ -1,10 +1,12 @@
-# 路印协议流动性挖矿定制化VNPY
+# 路印协议流动性挖矿定制化 VNPY (Loopring Liquidity Mining Bot)
 
 <p align="center">
 
   <img src ="https://vnpy.oss-cn-shanghai.aliyuncs.com/vnpy-logo.png"/>
 
 </p>
+
+(An English version follows below)
 
 ## 说明
 
@@ -91,4 +93,83 @@ vn.py是一套基于Python的开源量化交易系统开发框架，于2015年1�
 
 ## 版权说明
 
+MIT
+
+
+## Description
+
+This is a highly customized vn.py for [Loopring DEX](https://loopring.io) liquidity mining. It streamlines most of the code that is irrelevant to core functions and focuses on liquidity providing and mining functions.
+
+vn.py is a Python-based open source trading bot system development framework. It was officially released in January 2015 and has been continuously contributing to the open source community since.
+
+[Loopring DEX](https://loopring.io) is Ethereum's first and only zkRollup exchange, allowing for high-performance trading with complete self-custodial security. Liquidity mining on Loopring Exchange is the act of placing resting limit orders on certain orderbooks at tight spreads. In other words, adding liquidity to the venue. For this service, fixed reward pools are specified and distributed per trading pair. Rewards accrue hourly and are paid out monthly.
+
+## Installation and operation
+
+Edit example/no_ui/run.py, specify the parameters. The account parameters need to be obtained from Loopring DEX. For how to open an account, please refer to the Loopring Exchange documentation https://docs.loopring.io/en/
+
+SETTINGS [ "log.console" ] =  True 	#Whether to output the log to the screen, the default is output
+
+
+#Account  parameters, you can export and paste from Loopring loopring_dex_setting = {
+     "name" : " Liquid mining account" ,
+     "exchangeName" : "LoopringDEX: Beta 1" ,
+     "exchangeAddress" : "0x944644Ea989Ec64c2Ab9eF341D383cEf586A5777" ,
+     "exchangeId" : 2 ,        # exchange ID 
+    "accountAddress" : "1" , # account address 
+    "accountId" : 1 ,         # account ID 
+    "apiKey" : "1" ,         # API key 
+    "publicKeyX" : "1",      # Public Key X 
+    "publicKeyY" : "1" ,      # Public Key Y 
+    "privateKey" : "1" ,      # Secret Key, KEEP IT SECRET!!!
+}
+
+
+#Liquidity  mining algorithm parameter algo_trading_setting = {
+     "template_name" : "LiquidMiningAlgo" , # Run liquidity mining by default
+    
+    "vt_symbol" : "LRC-USDT.LOOPRING" ,     # {MINING_MARKET}.LOOPRING
+    
+    "price_offset" : 0.7 ,                  # The gap with the market price, here is 0.7%, usually there is a reward within 1% of liquidity mining
+    
+    "price_tolerance" : 0.3 ,               # Market price fluctuation tolerance, where 0.3 is equal to keeping the order price within the range of 0.7% +/- 0.3% of 
+                                         the market price 
+                                         , # that is, the market price is 0.4% ~ 1.0% above and below. Once the market price changes and the order price exceeds this range, place an order again, # and will continue to be 0.4%~1.0% of the new market price. 
+                                         # The recommended value is slightly less than price_offset, and price_offset + price_tolerance <= mining reward range
+                                   
+    "volume" : 120 ,                        # single order quantity
+    
+    "interval" : 15 ,                       # Order interval time, in seconds
+    
+    "min_order_level" : 3 ,                 # The highest order level, between 0 and 5, where 3 means keeping the order below buy 3 and sell above 3. Setting to 0 means not considering the order position 
+                                         # Take a sell order as an example, if the current order price is higher than the current market price to sell 3, the order will be cancelled and the order will be placed again according to price_offset. 
+                                         # Note: If the configuration is not reasonable or the market depth is insufficient, the order may not be placed, that is, the calculated order price will always be lower than the selling price (higher than the buying price).
+    
+    "min_pos" : - 5000 ,                     # The minimum position unit, that is, the number of LRC sold, which is less than this value to stop liquidity mining
+    
+    "max_pos" : 5000                       # The maximum position unit, that is, the number of LRC bought, if it is greater than this value, liquidity mining will stop 
+}
+docker build --rm -t mining:latest .After running the root directory , there are two ways (equivalent) to start liquidity mining after success.
+
+a. Run directly on this machine docker run mining:latest.
+
+b. Run docker run -it mining:latest bashinto the Docker image command line, and then run python ../example/no_ui/run.py.
+
+You can see the real-time order from the log, and you can see the instant liquidity mining rewards from the exchange order page.
+
+Ctrl+C ends the mirroring operation. Under normal circumstances, all orders will be cancelled when exiting. It is recommended to observe the log/exchange page to confirm to avoid accidents.
+
+Note: After each run.py parameter change, you need to re-run step 2 to regenerate and run a new Docker image (very fast).
+
+## Supplemental Info
+For more information about vn.py, please visit the [VNPY project homepage](http://www.vnpy.com/)
+
+For liquidity mining activities and reward calculation methods, please check [Loopring Blog](https://loopring.org/#/post/loopring-exchange-liquidity-mining-competition).
+
+## Contact information
+exchange@loopring.io
+
+* [exchange@loopring.io](mailto:exchange@loopring.io)
+
+* [Loopring Discord](https://discord.gg/KkYccYp)
 MIT
