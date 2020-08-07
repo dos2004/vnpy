@@ -153,6 +153,12 @@ class LoopringGateway(BaseGateway):
             self.write_log(f"ERROR: already subscribed {len(self.subscribe_reqs)} sources {self.subscribe_reqs}")
             return
 
+        tokens = req.symbol.split('-')
+        for t in tokens:
+            assert t in self.rest_api.tokens
+            tokenId = self.rest_api.tokens[t].tokenId
+            self.rest_api.query_orderId(tokenId)
+
         self.trade_ws_apis[0].subscribe(req)
         self.market_ws_apis[0].subscribe(req)
         self.subscribe_reqs[req.symbol] = req
@@ -163,7 +169,8 @@ class LoopringGateway(BaseGateway):
 
     def cancel_order(self, req: CancelRequest):
         """"""
-        self.rest_api.cancel_order(req)
+        if req.orderid in self.orders:
+            self.rest_api.cancel_order(req)
 
     def query_account(self):
         """"""
@@ -544,6 +551,7 @@ class LoopringRestApi(RestClient):
             "signatureRy": str(signedMessage.sig.R.y),
             "signatureS": str(signedMessage.sig.s),
             "clientOrderId": clientOrderId,
+            "orderType": "MAKER_ONLY"
         }
 
         # self.gateway.write_log(f"create new order {newOrder}")
@@ -711,7 +719,6 @@ class LoopringRestApi(RestClient):
             )
             self.gateway.on_contract(contract)
             self.tokens[d['symbol']] = contract
-            self.query_orderId(d['tokenId'])
         self.gateway.write_log("start query_contract")
         self.query_contract()
 
@@ -1194,20 +1201,6 @@ class LoopringDataWebsocketApi(WebsocketClient):
                 "snapshot" : True,
             }
         )
-        # market trade
-        # subscribe_args.append(
-        #     {
-        #         "topic"  : "trade",
-        #         "market" : req.symbol,
-        #     }
-        # )
-        #ticker
-        # subscribe_args.append(
-        #     {
-        #         "topic"  : "ticker",
-        #         "market" : req.symbol,
-        #     }
-        # )
 
         # Create new connection
         channels = {
@@ -1221,7 +1214,7 @@ class LoopringDataWebsocketApi(WebsocketClient):
     def on_packet(self, packet):
         # self.gateway.write_log(f"行情on_packet {packet}")
         if packet == "ping":
-            self.gateway.write_log("行情send_pong")
+            self.gateway.write_log("send pong to srv")
             self._send_text("pong")
             return
 
