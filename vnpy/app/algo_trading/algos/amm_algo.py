@@ -24,7 +24,7 @@ class AutoMarketMakerAlgo(AlgoTemplate):
         "base_asset": 0.0,
         "quote_asset": 0.0,
         "price_offset": 1,
-        "price_tolerance": 0.5,
+        "price_tolerance": 5,
         "interval": 10,
         "volume": 1000,
         "min_order_level": 5,
@@ -103,7 +103,6 @@ class AutoMarketMakerAlgo(AlgoTemplate):
     
     def prune_ask_orders(self, tick: TickData):
         #TODO: prune hedge orders
-        price_tolerance = self.price_tolerance
         market_price = (tick.ask_price_1 + tick.bid_price_1) / 2
         if self.vt_ask_orderid != "":
             target_ask_price = round_to(market_price * ((100 + self.price_offset)/100), self.pricetick)
@@ -113,7 +112,6 @@ class AutoMarketMakerAlgo(AlgoTemplate):
 
     def prune_bid_orders(self, tick: TickData):
         #TODO: prune hedge orders
-        price_tolerance = self.price_tolerance
         market_price = (tick.ask_price_1 + tick.bid_price_1) / 2
         if self.vt_bid_orderid != "":
             target_bid_price = round_to(market_price * ((100 - self.price_offset)/100), self.pricetick)
@@ -141,7 +139,7 @@ class AutoMarketMakerAlgo(AlgoTemplate):
         if self.vt_ask_orderid == "" and len(self.hedge_ask_orderids) == 0:
             min_ask_price = getattr(self.last_tick, f"ask_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
             vt_ask_price = round_to(market_price * ((100 + self.price_offset)/100), self.pricetick)
-            if vt_ask_price >= min_ask_price:
+            if vt_ask_price >= min_ask_price and math.fabs(vt_ask_price - 1)*100 <= self.price_tolerance:
                 self.vt_ask_price = vt_ask_price
                 self.vt_ask_volume = self.volume
                 if self.vt_ask_volume > 0:
@@ -151,7 +149,7 @@ class AutoMarketMakerAlgo(AlgoTemplate):
         if self.vt_bid_orderid == "" and len(self.hedge_bid_orderids) == 0:
             max_bid_price = getattr(self.last_tick, f"bid_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
             vt_bid_price = round_to(market_price * ((100 - self.price_offset)/100), self.pricetick)
-            if vt_bid_price <= max_bid_price:
+            if vt_bid_price <= max_bid_price and math.fabs(vt_bid_price - 1)*100 <= self.price_tolerance:
                 self.vt_bid_price = vt_bid_price
                 self.vt_bid_volume = self.volume
                 if self.vt_bid_volume > 0:

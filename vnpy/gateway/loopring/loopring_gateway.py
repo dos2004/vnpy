@@ -550,8 +550,7 @@ class LoopringRestApi(RestClient):
             "signatureRx": str(signedMessage.sig.R.x),
             "signatureRy": str(signedMessage.sig.R.y),
             "signatureS": str(signedMessage.sig.s),
-            "clientOrderId": clientOrderId,
-            "orderType": "MAKER_ONLY"
+            "clientOrderId": clientOrderId
         }
 
         # self.gateway.write_log(f"create new order {newOrder}")
