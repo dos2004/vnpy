@@ -60,7 +60,8 @@ class AutoMarketMakerAlgo(AlgoTemplate):
         self.interval           = setting["interval"]
         self.volume             = setting["volume"]
         self.min_order_level    = setting["min_order_level"]
-        self.max_loss           = setting["max_loss"]
+        self.max_loss           = setting.get("max_loss", 0.1 * (self.base_asset + self.quote_asset))
+        self.fee_rate           = setting.get("fee_rate", 0.0015)
 
         # validate setting
         assert self.price_tolerance <= self.price_offset
@@ -210,18 +211,20 @@ class AutoMarketMakerAlgo(AlgoTemplate):
             return
 
         if order.direction == Direction.SHORT:
+            hedge_price = order.price * (1-self.fee_rate)
             vt_hedge_bid_orderid = self.buy(
                 self.vt_symbol,
-                order.price,
+                hedge_price,
                 volume
             )
             if vt_hedge_bid_orderid != "":
                 self.write_log(f"委托AMM对冲买单，价格:{order.price}, 下单量: {volume}")
                 self.hedge_bid_orderids.append(vt_hedge_bid_orderid)
         elif order.direction == Direction.LONG:
+            hedge_price = order.price / (1-self.fee_rate)
             vt_hedge_ask_orderid = self.sell(
                 self.vt_symbol,
-                order.price,
+                hedge_price,
                 volume
             )
             if vt_hedge_ask_orderid != "":
