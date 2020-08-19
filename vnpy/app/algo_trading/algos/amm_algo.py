@@ -62,6 +62,7 @@ class AutoMarketMakerAlgo(AlgoTemplate):
         self.min_order_level    = setting["min_order_level"]
         self.max_loss           = setting.get("max_loss", 0.1 * (self.base_asset + self.quote_asset))
         self.fee_rate           = setting.get("fee_rate", 0.0015)
+        assert 0 <= self.fee_rate < 1
 
         # validate setting
         assert self.price_tolerance <= self.price_offset
@@ -105,12 +106,9 @@ class AutoMarketMakerAlgo(AlgoTemplate):
         price_tolerance = self.price_tolerance
         market_price = (tick.ask_price_1 + tick.bid_price_1) / 2
         if self.vt_ask_orderid != "":
-            cancel_ask = False
             target_ask_price = round_to(market_price * ((100 + self.price_offset)/100), self.pricetick)
             if self.vt_ask_price > target_ask_price:
-                cancel_ask = True
                 self.write_log(f"当前卖单{self.vt_ask_price} 超出目标价 {target_ask_price}，取消{self.vt_ask_orderid}")
-            if cancel_ask:
                 self.cancel_order(self.vt_ask_orderid)
 
     def prune_bid_orders(self, tick: TickData):
@@ -118,12 +116,9 @@ class AutoMarketMakerAlgo(AlgoTemplate):
         price_tolerance = self.price_tolerance
         market_price = (tick.ask_price_1 + tick.bid_price_1) / 2
         if self.vt_bid_orderid != "":
-            cancel_bid = False
             target_bid_price = round_to(market_price * ((100 - self.price_offset)/100), self.pricetick)
             if  self.vt_bid_price < target_bid_price:
-                cancel_bid = True
                 self.write_log(f"当前买单{self.vt_bid_price} 超出目标价 {target_bid_price}，取消{self.vt_bid_orderid}")
-            if cancel_bid:
                 self.cancel_order(self.vt_bid_orderid)
 
     def on_timer(self):
@@ -172,18 +167,18 @@ class AutoMarketMakerAlgo(AlgoTemplate):
             if not order.is_active():
                 if order.traded > 0:
                     self.write_log(f"AMM卖单成交，价格:{order.price}，成交量: {order.traded}")
+                    self.hedge(order)
                 self.vt_ask_orderid = ""
                 self.vt_ask_price = 0.0
-                self.hedge(order)
                 self.x-=order.traded
                 self.y+=order.traded*order.price
         elif order.vt_orderid == self.vt_bid_orderid:
             if not order.is_active():
                 if order.traded > 0:
                     self.write_log(f"AMM买单成交，价格:{order.price}，成交量: {order.traded}")
+                    self.hedge(order)
                 self.vt_bid_orderid = ""
                 self.vt_bid_price = 0.0
-                self.hedge(order)
                 self.x+=order.traded
                 self.y-=order.traded*order.price
         elif order.vt_orderid in self.hedge_ask_orderids:
@@ -207,11 +202,9 @@ class AutoMarketMakerAlgo(AlgoTemplate):
     def hedge(self, order: OrderData):
         """"""
         volume = order.traded
-        if volume == 0:
-            return
-
         if order.direction == Direction.SHORT:
-            hedge_price = order.price * (1-self.fee_rate)
+            hedge_price = round_to(order.price * (1-self.fee_rate), self.pricetick)
+            volume = volume/(1-self.fee_rate)
             vt_hedge_bid_orderid = self.buy(
                 self.vt_symbol,
                 hedge_price,
@@ -221,7 +214,7 @@ class AutoMarketMakerAlgo(AlgoTemplate):
                 self.write_log(f"委托AMM对冲买单，价格:{order.price}, 下单量: {volume}")
                 self.hedge_bid_orderids.append(vt_hedge_bid_orderid)
         elif order.direction == Direction.LONG:
-            hedge_price = order.price / (1-self.fee_rate)
+            hedge_price = round_to(order.price / (1-self.fee_rate), self.pricetick)
             vt_hedge_ask_orderid = self.sell(
                 self.vt_symbol,
                 hedge_price,
