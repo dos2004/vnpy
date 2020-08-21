@@ -65,7 +65,6 @@ class AutoMarketMakerAlgo(AlgoTemplate):
         assert 0 <= self.fee_rate < 1
 
         # validate setting
-        assert self.price_tolerance <= self.price_offset
         assert 0 <= self.min_order_level <= 5
 
         # Variables
