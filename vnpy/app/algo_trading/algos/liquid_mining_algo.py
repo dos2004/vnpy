@@ -187,7 +187,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             vt_ask_price = round_to(self.last_tick.ask_price_1 + (self.pricetick * self.min_order_level), self.pricetick)
             self.vt_ask_price = vt_ask_price
             volume = self.volume if not use_max_volume else self.current_balance[self.market_vt_tokens[0]] * max_volume_ratio
-            volume = round_to(volume - 0.01, 0.01) - 12
+            volume = round_to(volume - 0.01, 0.01) - 18
             self.write_log(f"流动性挖矿卖出，价:{self.vt_ask_price}, 量:{volume}")
             self.vt_ask_orderid = self.sell(self.vt_symbol, self.vt_ask_price, volume)
 
