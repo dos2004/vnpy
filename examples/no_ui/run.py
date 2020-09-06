@@ -41,6 +41,7 @@ algo_trading_setting = {
     "price_offset": 0.7,
     "price_tolerance": 0.3,
     "volume": 1000,
+    "max_volume_ratio": 0,
     "interval": 30,
     "min_order_level": 3,
     "min_pos": -5000,
