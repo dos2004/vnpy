@@ -103,7 +103,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             user_account = self.algo_engine.main_engine.get_account(vt_token)
             if type(user_account) is not AccountData:
                 return False
-            self.current_balance[vt_token] = user_account.balance
+            self.current_balance[vt_token] = user_account.balance - user_account.frozen
         # self.write_log(f"当前余额 {self.current_balance}")
         return True
 
@@ -188,7 +188,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             if vt_ask_price >= min_ask_price:
                 self.vt_ask_price = vt_ask_price
                 volume = self.volume if not use_max_volume else self.current_balance[self.market_vt_tokens[0]] * max_volume_ratio
-                volume = round_to(volume - 0.01, 0.01) - 7
+                volume = round_to(volume - 0.01, 0.01)
                 self.write_log(f"流动性挖矿卖出，价:{self.vt_ask_price}, 量:{volume}")
                 self.vt_ask_orderid = self.sell(self.vt_symbol, self.vt_ask_price, volume)
 
@@ -199,7 +199,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             if vt_bid_price <= max_bid_price:
                 self.vt_bid_price = vt_bid_price
                 volume = self.volume if not use_max_volume else (self.current_balance[self.market_vt_tokens[1]] / self.vt_bid_price) * max_volume_ratio
-                volume = round_to(volume - 0.01, 0.01) - 7
+                volume = round_to(volume - 0.01, 0.01)
                 self.write_log(f"流动性挖矿买入，价:{self.vt_bid_price}, 量:{volume}")
                 self.vt_bid_orderid = self.buy(self.vt_symbol, self.vt_bid_price, volume)
         self.put_variables_event()
