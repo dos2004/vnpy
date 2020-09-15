@@ -103,7 +103,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             user_account = self.algo_engine.main_engine.get_account(vt_token)
             if type(user_account) is not AccountData:
                 return False
-            self.current_balance[vt_token] = user_account.balance - user_account.frozen
+            self.current_balance[vt_token] = user_account.balance
         # self.write_log(f"当前余额 {self.current_balance}")
         return True
 
