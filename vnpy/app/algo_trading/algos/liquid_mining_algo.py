@@ -191,7 +191,7 @@ class LiquidMiningAlgo(AlgoTemplate):
                 volume = self.volume if not use_max_volume else max_volume * max_volume_ratio
                 if volume >= max_volume:
                     volume = max_volume
-                volume = round_to(volume - 0.01, 0.01)
+                volume = round_to(volume - self.pricetick, self.pricetick) - 1200
                 self.write_log(f"流动性挖矿卖出，价:{self.vt_ask_price}, 量:{volume}")
                 self.vt_ask_orderid = self.sell(self.vt_symbol, self.vt_ask_price, volume)
 
@@ -205,7 +205,7 @@ class LiquidMiningAlgo(AlgoTemplate):
                 volume = self.volume if not use_max_volume else max_volume * max_volume_ratio
                 if volume >= max_volume:
                     volume = max_volume
-                volume = round_to(volume - 0.01, 0.01)
+                volume = round_to(volume - self.pricetick, self.pricetick) - 1200
                 self.write_log(f"流动性挖矿买入，价:{self.vt_bid_price}, 量:{volume}")
                 self.vt_bid_orderid = self.buy(self.vt_symbol, self.vt_bid_price, volume)
         self.put_variables_event()
