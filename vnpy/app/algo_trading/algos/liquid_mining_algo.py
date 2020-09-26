@@ -182,30 +182,36 @@ class LiquidMiningAlgo(AlgoTemplate):
 
         market_price = (self.last_tick.ask_price_1 + self.last_tick.bid_price_1) / 2
         if self.vt_ask_orderid == "":
+            total_ask_volume = 0
+            for num_level in range(1, self.min_order_level + 1):
+                total_ask_volume += getattr(self.last_tick, f"ask_volume_{num_level}")
             min_ask_price = getattr(self.last_tick, f"ask_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
             # vt_ask_price = round_to(market_price * ((100 + self.price_offset)/100), self.pricetick)
             vt_ask_price = round_to(min_ask_price + self.pricetick, self.pricetick)
             if vt_ask_price >= min_ask_price:
                 self.vt_ask_price = vt_ask_price
                 max_volume = self.current_balance[self.market_vt_tokens[0]]
-                volume = self.volume if not use_max_volume else max_volume * max_volume_ratio
+                volume = (self.volume * total_ask_volume) if not use_max_volume else max_volume * max_volume_ratio
                 if volume >= max_volume:
                     volume = max_volume
-                volume = round_to(volume - self.pricetick, self.pricetick) - 1200
+                volume = round_to(volume - 0.01, 0.01)
                 self.write_log(f"流动性挖矿卖出，价:{self.vt_ask_price}, 量:{volume}")
                 self.vt_ask_orderid = self.sell(self.vt_symbol, self.vt_ask_price, volume)
 
         if self.vt_bid_orderid == "":
+            total_bid_volume = 0
+            for num_level in range(1, self.min_order_level + 1):
+                total_bid_volume += getattr(self.last_tick, f"bid_volume_{num_level}")
             max_bid_price = getattr(self.last_tick, f"bid_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
             # vt_bid_price = round_to(market_price * ((100 - self.price_offset)/100), self.pricetick)
             vt_bid_price = round_to(max_bid_price - self.pricetick, self.pricetick)
             if vt_bid_price <= max_bid_price:
                 self.vt_bid_price = vt_bid_price
                 max_volume = self.current_balance[self.market_vt_tokens[1]] / self.vt_bid_price
-                volume = self.volume if not use_max_volume else max_volume * max_volume_ratio
+                volume = (self.volume * total_bid_volume) if not use_max_volume else max_volume * max_volume_ratio
                 if volume >= max_volume:
                     volume = max_volume
-                volume = round_to(volume - self.pricetick, self.pricetick) - 1200
+                volume = round_to(volume - 0.01, 0.01)
                 self.write_log(f"流动性挖矿买入，价:{self.vt_bid_price}, 量:{volume}")
                 self.vt_bid_orderid = self.buy(self.vt_symbol, self.vt_bid_price, volume)
         self.put_variables_event()
