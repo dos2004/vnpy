@@ -1079,8 +1079,9 @@ class LoopringTradeWebsocketApi(WebsocketClient):
         orderid = data["clientOrderId"]
         decimals = self.gateway.rest_api.contracts[market].decimals
         status = data["status"]
-        if status == "processing" and "filledSize" in data and int(data['filledSize']) > 0:
-            status = "filled"
+        if status in ["processing", "cancelling"]:
+            if "filledSize" in data and int(data['filledSize']) > 0:
+                status = "filled"
 
         order = OrderData(
             symbol=market,
@@ -1090,7 +1091,7 @@ class LoopringTradeWebsocketApi(WebsocketClient):
             price=float(data["price"]),
             volume=float(data["size"])/(10**decimals),    # TODO: decimals
             traded=float(data["filledSize"])/(10**decimals),
-            status=STATUS_LOOPRING2VT[status],
+            status=STATUS_LOOPRING2VT.get(status, None),
             datetime=datetime.fromtimestamp(float(packet["ts"]) / 1000).__str__(),
             gateway_name=self.gateway_name
         )
