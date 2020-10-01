@@ -24,6 +24,7 @@ class LiquidMiningAlgo(AlgoTemplate):
         "price_offset": 0.0,
         "price_tolerance": 0.0,
         "volume": 0,
+        "max_volume_ratio": 0,
         "interval": 10,
         "min_order_level": 5,
         "min_pos": 5000,
@@ -51,6 +52,8 @@ class LiquidMiningAlgo(AlgoTemplate):
         self.price_offset       = setting["price_offset"]
         self.price_tolerance    = setting["price_tolerance"]
         self.volume             = setting["volume"]
+        self.max_volume_ratio   = setting.get("max_volume_ratio", 0)
+        assert 0 <= self.max_volume_ratio <= 1
         self.interval           = setting["interval"]
         self.min_order_level    = setting["min_order_level"]
         self.min_pos            = setting["min_pos"]
@@ -69,16 +72,47 @@ class LiquidMiningAlgo(AlgoTemplate):
         self.vt_bid_price = 0.0
 
         self.last_tick = None
+        self._init_market_accounts(self.vt_symbol)
 
         self.subscribe(self.vt_symbol)
         self.put_parameters_event()
         self.put_variables_event()
+
+    def _init_market_accounts(self, active_vt_symbol):
+        SYMBOL_SPLITTER = re.compile(r"^(\w+)[-:/]?(BTC|ETH|BNB|XRP|USDT|USDC|USDS|TUSD|PAX|DAI)$")
+        market_token_pair = active_vt_symbol.split('.')[0]
+        active_market = active_vt_symbol.split('.')[1]
+        if not market_token_pair or not active_market:
+            self.algo_engine.main_engine.write_log(f"ERROR: parse active_vt {active_vt_symbol} failed")
+            return False
+
+        token_pair_match = SYMBOL_SPLITTER.match(market_token_pair.upper())
+        if not token_pair_match:
+            self.algo_engine.main_engine.write_log(f"ERROR: parse symbol {market_token_pair} failed")
+            return False
+
+        self.market_vt_tokens = [
+                f"{active_market}.{token_pair_match.group(1)}",
+                f"{active_market}.{token_pair_match.group(2)}"
+            ]
+        self.current_balance = {}
+        self._update_current_balance()
+
+    def  _update_current_balance(self):
+        for vt_token in self.market_vt_tokens:
+            user_account = self.algo_engine.main_engine.get_account(vt_token)
+            if type(user_account) is not AccountData:
+                return False
+            self.current_balance[vt_token] = user_account.balance
+        # self.write_log(f"当前余额 {self.current_balance}")
+        return True
 
     def on_start(self):
         """"""
         random.seed(time.time())
         self.write_log("开始 流动性挖矿")
         self.pricetick = self.algo_engine.main_engine.get_contract(self.vt_symbol).pricetick
+        self.volumetick = self.algo_engine.main_engine.get_contract(self.vt_symbol).min_volume
         assert self.pricetick > 0
 
     def on_tick(self, tick: TickData):
@@ -132,22 +166,30 @@ class LiquidMiningAlgo(AlgoTemplate):
             return
         self.timer_count = 0
 
+        if not self._update_current_balance():
+            self.write_log(f"查询余额失败，上次余额: [{self.current_balance}]")
+            return
+
+        use_max_volume = self.max_volume_ratio > 0
+        max_volume_ratio = self.max_volume_ratio
         market_price = (self.last_tick.ask_price_1 + self.last_tick.bid_price_1) / 2
         if self.vt_ask_orderid == "":
             min_ask_price = getattr(self.last_tick, f"ask_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
             vt_ask_price = round_to(market_price * ((100 + self.price_offset)/100), self.pricetick)
             if vt_ask_price >= min_ask_price:
                 self.vt_ask_price = vt_ask_price
-                self.write_log(f"委托流动性挖矿卖单，价格：{self.vt_ask_price}")
-                self.vt_ask_orderid = self.sell(self.vt_symbol, self.vt_ask_price, self.volume)
+                volume = self.volume if not use_max_volume else self.current_balance[self.market_vt_tokens[0]] * max_volume_ratio
+                self.write_log(f"流动性挖矿卖出，价:{self.vt_ask_price}, 量:{volume}")
+                self.vt_ask_orderid = self.sell(self.vt_symbol, self.vt_ask_price, round_to(volume, self.volumetick))
 
         if self.vt_bid_orderid == "":
             max_bid_price = getattr(self.last_tick, f"bid_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
             vt_bid_price = round_to(market_price * ((100 - self.price_offset)/100), self.pricetick)
             if vt_bid_price <= max_bid_price:
                 self.vt_bid_price = vt_bid_price
-                self.write_log(f"委托流动性挖矿买单，价格：{self.vt_bid_price}")
-                self.vt_bid_orderid = self.buy(self.vt_symbol, self.vt_bid_price, self.volume)
+                volume = self.volume if not use_max_volume else (self.current_balance[self.market_vt_tokens[1]] / self.vt_bid_price) * max_volume_ratio
+                self.write_log(f"流动性挖矿买入，价:{self.vt_bid_price}, 量:{volume}")
+                self.vt_bid_orderid = self.buy(self.vt_symbol, self.vt_bid_price, round_to(volume, self.volumetick))
         self.put_variables_event()
 
     def on_order(self, order: OrderData):
