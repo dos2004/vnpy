@@ -144,7 +144,7 @@ class LoopringGateway(BaseGateway):
         for market_ws_api in self.market_ws_apis:
             market_ws_api.connect(proxy_host, proxy_port)
         for trace_ws_api in self.trade_ws_apis:
-            trace_ws_api.connect(WEBSOCKET_DATA_HOST, proxy_host, proxy_port)
+            trace_ws_api.connect(proxy_host, proxy_port)
 
     def subscribe(self, req: SubscribeRequest):
         """"""
@@ -162,6 +162,9 @@ class LoopringGateway(BaseGateway):
         self.trade_ws_apis[0].subscribe(req)
         self.market_ws_apis[0].subscribe(req)
         self.subscribe_reqs[req.symbol] = req
+
+    def query_ws_key(self):
+        return self.rest_api.query_ws_key()
 
     def send_order(self, req: OrderRequest):
         """"""
@@ -342,6 +345,21 @@ class LoopringRestApi(RestClient):
         self.gateway.write_log("start query_account")
         self.query_account()
         self.gateway.write_log("trade_ws_apis connect")
+
+    def query_ws_key(self):
+        data = {
+            "security": Security.NONE
+        }
+
+        response = self.request(
+            "GET",
+            path="/v2/ws/key",
+            data=data
+        )
+        json_resp = response.json()
+        if json_resp['resultInfo']['code'] != 0:
+            raise AttributeError(f"query_ws_key failed {data}")
+        return json_resp['data']
 
     def query_time(self):
         """"""
@@ -669,7 +687,7 @@ class LoopringRestApi(RestClient):
         self.gateway.write_log("账户余额查询成功")
 
     def on_query_orderId(self, data, request):
-        # self.gateway.write_log(f"on_query_orderId {request} {data}")
+        self.gateway.write_log(f"on_query_orderId {request} {data}")
         if data['resultInfo']['code'] != 0:
             raise AttributeError(f"on_query_orderId failed {data}")
 
@@ -983,8 +1001,9 @@ class LoopringTradeWebsocketApi(WebsocketClient):
         self.account_sub = False
         # self.orders = {}
 
-    def connect(self, url, proxy_host, proxy_port):
+    def connect(self, proxy_host, proxy_port):
         """"""
+        url = WEBSOCKET_DATA_HOST + "?" + urllib.parse.urlencode({"wsApiKey":self.gateway.query_ws_key()}, safe=',')
         self.init(url, proxy_host, proxy_port)
         self.start()
 
@@ -994,6 +1013,8 @@ class LoopringTradeWebsocketApi(WebsocketClient):
         self.last_subscribe_reqs.update(self.subscribe_reqs)
         self.subscribe_reqs.clear()
         self.account_sub = False
+        self.host = WEBSOCKET_TRADE_HOST + "?" + urllib.parse.urlencode({"wsApiKey":self.gateway.query_ws_key()}, safe=',')
+        sleep(2) # sleep 2s to avoid srv refuse connection
 
     def on_connected(self):
         """"""
@@ -1004,7 +1025,7 @@ class LoopringTradeWebsocketApi(WebsocketClient):
 
     def subscribe(self, req: SubscribeRequest):
         # subscribe
-        self.gateway.write_log(f"交易Websocket API连接 订阅{req}.")
+        self.gateway.write_log(f"交易Websocket API 订阅{req}.")
         channels = {
             "op": "sub",
             "sequence": 10000,
@@ -1153,7 +1174,7 @@ class LoopringDataWebsocketApi(WebsocketClient):
         self.proxy_host = proxy_host
         self.proxy_port = proxy_port
 
-        url = WEBSOCKET_DATA_HOST
+        url = WEBSOCKET_DATA_HOST + "?" + urllib.parse.urlencode({"wsApiKey":self.gateway.query_ws_key()}, safe=',')
         self.init(url, self.proxy_host, self.proxy_port)
         self.start()
 
@@ -1162,6 +1183,8 @@ class LoopringDataWebsocketApi(WebsocketClient):
         self.gateway.write_log(f"行情Websocket API连接断开: subscribed reqs = {self.subscribe_reqs}")
         self.last_subscribe_reqs.update(self.subscribe_reqs)
         self.subscribe_reqs.clear()
+        self.host = WEBSOCKET_TRADE_HOST + "?" + urllib.parse.urlencode({"wsApiKey":self.gateway.query_ws_key()}, safe=',')
+        sleep(2) # sleep 2s to avoid srv refuse connection
 
     def on_connected(self):
         """"""
@@ -1170,7 +1193,7 @@ class LoopringDataWebsocketApi(WebsocketClient):
             self.subscribe(req)
 
     def subscribe(self, req: SubscribeRequest):
-        self.gateway.write_log(f"行情Websocket subscribe {req} after {self.subscribe_reqs}")
+        self.gateway.write_log(f"行情Websocket 订阅 {req}")
         """"""
 
         if req.symbol not in symbol_name_map:
