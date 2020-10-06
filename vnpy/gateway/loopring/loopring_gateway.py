@@ -661,7 +661,7 @@ class LoopringRestApi(RestClient):
         self.query_orders()
 
     def on_query_balance(self, data, request):
-        self.gateway.write_log(f"on_query_balance {data}")
+        # self.gateway.write_log(f"on_query_balance {data}")
         if data['resultInfo']['code'] != 0:
             raise AttributeError(f"on_query_balance failed {data}")
 
@@ -687,7 +687,7 @@ class LoopringRestApi(RestClient):
         self.gateway.write_log("账户余额查询成功")
 
     def on_query_orderId(self, data, request):
-        self.gateway.write_log(f"on_query_orderId {request} {data}")
+        # self.gateway.write_log(f"on_query_orderId {request} {data}")
         if data['resultInfo']['code'] != 0:
             raise AttributeError(f"on_query_orderId failed {data}")
 
@@ -695,8 +695,8 @@ class LoopringRestApi(RestClient):
         self.orderId_manager.put_orderId(tokenId, int(data['data']))
 
     def on_query_orders(self, data, request):
-        self.gateway.write_log(f"on_query_orders {data}")
-
+        # self.gateway.write_log(f"on_query_orders {data}")
+        orders = []
         for order in data['data']['orders']:
             # TODO: use correct decimals to calc volume
             decimals = self.contracts[order['market']].decimals
@@ -713,9 +713,9 @@ class LoopringRestApi(RestClient):
                 datetime=datetime.fromtimestamp(float(order['createdAt']) / 1000).__str__(),
                 gateway_name=self.gateway_name,
             )
+            orders.append(order_data)
             self.gateway.on_order(order_data)
-
-        self.gateway.write_log("所有Orders查询成功")
+        self.gateway.write_log(f"所有Orders查询成功:\n{orders}")
 
     def on_query_token(self, data, request):
         """"""
@@ -784,7 +784,7 @@ class LoopringRestApi(RestClient):
             self.gateway.on_order(order)
             return
 
-        self.gateway.write_log(f"下单 {request.data} 成功")
+        self.gateway.write_log(f"下单 {request.extra[0]} 成功, hash = {data['data']}.")
         order = request.extra[0]
         order.status = Status.NOTTRADED
         self.gateway.on_order(order)
@@ -827,7 +827,7 @@ class LoopringRestApi(RestClient):
             sleep(0.15)
 
     def on_error_recover_orderId(self, request, newest_order_id: int = 0):
-        self.gateway.write_log(f"on_error_recover_orderId: {request} {newest_order_id}")
+        # self.gateway.write_log(f"on_error_recover_orderId: {request} {newest_order_id}")
         order_detail = ujson.loads(request.data)
         orderId = order_detail.get('orderId', None)
         tokenSId = order_detail.get('tokenSId', None)
