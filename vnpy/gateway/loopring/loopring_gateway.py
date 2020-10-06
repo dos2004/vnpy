@@ -768,6 +768,7 @@ class LoopringRestApi(RestClient):
 
     def on_send_order(self, data, request):
         if data['resultInfo']['code'] != 0:
+            self.gateway.write_log(f"下单 {request.extra[0]} 失败, 原因:{data['resultInfo']['message']}.")
             order = request.extra[0]
             order.status = Status.REJECTED
             # {'error': {'code': 102007, 'message': 'order existed, please check detail order info'}}

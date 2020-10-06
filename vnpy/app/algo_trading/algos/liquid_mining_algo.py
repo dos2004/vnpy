@@ -220,9 +220,9 @@ class LiquidMiningAlgo(AlgoTemplate):
 
     def on_trade(self, trade: TradeData):
         """"""
-        if trade.tradeid == self.vt_ask_orderid:
+        if trade.direction == Direction.SHORT:
             self.pos -= trade.volume
-        elif trade.tradeid == self.vt_bid_orderid:
+        elif trade.direction == Direction.LONG:
             self.pos += trade.volume
 
         self.put_variables_event()
