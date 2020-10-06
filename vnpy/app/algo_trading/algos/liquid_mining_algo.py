@@ -59,7 +59,7 @@ class LiquidMiningAlgo(AlgoTemplate):
         self.min_pos            = setting["min_pos"]
         self.max_pos            = setting["max_pos"]
         self.enable_ioc         = setting.get("enable_ioc", False)
-        self.ioc_intervel       = setting.get("ioc_intervel", self.interval)
+        self.ioc_intervel       = setting.get("ioc_interval", self.interval)
 
         # validate setting
         assert self.price_tolerance <= self.price_offset
@@ -150,7 +150,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             # if time to kill
             cancel_bid = False
             if self.enable_ioc and self.bid_order_alive_tick > self.ioc_intervel:
-                self.write_log(f"当前买单保持时间{self.ask_order_alive_tick} 超过 {self.ioc_intervel}")
+                self.write_log(f"当前买单保持时间{self.bid_order_alive_tick} 超过 {self.ioc_intervel}")
                 cancel_bid = True
             if not cancel_bid:
                 # if price check fail
