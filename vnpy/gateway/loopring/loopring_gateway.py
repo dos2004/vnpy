@@ -693,6 +693,7 @@ class LoopringRestApi(RestClient):
 
         tokenId = request.params['tokenSId']
         self.orderId_manager.put_orderId(tokenId, int(data['data']))
+        self.gateway.write_log("账户token{tokenId} orderId查询成功")
 
     def on_query_orders(self, data, request):
         # self.gateway.write_log(f"on_query_orders {data}")

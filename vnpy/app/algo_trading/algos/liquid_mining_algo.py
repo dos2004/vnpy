@@ -127,7 +127,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             # if time to kill
             cancel_ask = False
             if self.enable_ioc and self.ask_order_alive_tick > self.ioc_intervel:
-                self.write_log(f"当前卖单保持时间{self.ask_order_alive_tick} 超过 {self.ioc_intervel}")
+                self.write_log(f"卖单{self.vt_ask_orderid}有效时间{self.ask_order_alive_tick} ticks > {self.ioc_intervel},取消")
                 cancel_ask = True
             if not cancel_ask:
                 # if price check fail
@@ -136,10 +136,10 @@ class LiquidMiningAlgo(AlgoTemplate):
                 ask_price_diff = 100 * abs(self.vt_ask_price - target_ask_price) / target_ask_price
                 if ask_price_diff > price_tolerance:
                     cancel_ask = True
-                    self.write_log(f"当前卖单{self.vt_ask_price} 超出目标价 {target_ask_price} {ask_price_diff:.3f}%，取消")
+                    self.write_log(f"卖单{self.vt_ask_orderid}价{self.vt_ask_price}超出目标价 {target_ask_price} {ask_price_diff:.3f}%,取消")
                 if self.vt_ask_price < min_ask_price:
                     cancel_ask = True
-                    self.write_log(f"当前卖单{self.vt_ask_price} 低于最低卖{self.min_order_level}价 {min_ask_price:.3f}，取消")
+                    self.write_log(f"卖单{self.vt_ask_orderid}价{self.vt_ask_price}低于最低卖{self.min_order_level}价 {min_ask_price:.3f},取消")
 
             if cancel_ask:
                 self.cancel_order(self.vt_ask_orderid)
@@ -150,7 +150,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             # if time to kill
             cancel_bid = False
             if self.enable_ioc and self.bid_order_alive_tick > self.ioc_intervel:
-                self.write_log(f"当前买单保持时间{self.bid_order_alive_tick} 超过 {self.ioc_intervel}")
+                self.write_log(f"买单{self.vt_bid_orderid}有效时间{self.bid_order_alive_tick} ticks > {self.ioc_intervel},取消")
                 cancel_bid = True
             if not cancel_bid:
                 # if price check fail
@@ -159,10 +159,10 @@ class LiquidMiningAlgo(AlgoTemplate):
                 bid_price_diff = 100 * abs(self.vt_bid_price - target_bid_price) / target_bid_price
                 if bid_price_diff > price_tolerance:
                     cancel_bid = True
-                    self.write_log(f"当前买单{self.vt_bid_price} 超出目标价 {target_bid_price} {bid_price_diff:.3f}%，取消")
+                    self.write_log(f"买单{self.vt_bid_orderid}价{self.vt_bid_price} 超出目标价 {target_bid_price} {bid_price_diff:.3f}%,取消")
                 if self.vt_bid_price > max_bid_price:
                     cancel_bid = True
-                    self.write_log(f"当前买单{self.vt_bid_price} 高于最高买{self.min_order_level}价 {max_bid_price:.3f}，取消")
+                    self.write_log(f"买单{self.vt_bid_orderid}价{self.vt_bid_price} 高于最高买{self.min_order_level}价 {max_bid_price:.3f},取消")
 
             if cancel_bid:
                 self.cancel_order(self.vt_bid_orderid)
@@ -228,10 +228,10 @@ class LiquidMiningAlgo(AlgoTemplate):
     def on_trade(self, trade: TradeData):
         """"""
         if trade.direction == Direction.SHORT:
-            self.write_log(f"流动性挖矿卖出成交，价:{trade.price}, 量:{trade.volume}")
+            self.write_log(f"流动性挖矿卖单{trade.vt_orderid}成交，价:{trade.price}, 量:{trade.volume}")
             self.pos -= trade.volume
         elif trade.direction == Direction.LONG:
-            self.write_log(f"流动性挖矿买入成交，价:{trade.price}, 量:{trade.volume}")
+            self.write_log(f"流动性挖矿买单{trade.vt_orderid}成交，价:{trade.price}, 量:{trade.volume}")
             self.pos += trade.volume
 
         self.put_variables_event()
