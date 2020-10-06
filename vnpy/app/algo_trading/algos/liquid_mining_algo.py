@@ -125,7 +125,10 @@ class LiquidMiningAlgo(AlgoTemplate):
         if self.vt_ask_orderid != "":
             self.ask_order_alive_tick += 1
             # if time to kill
-            cancel_ask = self.enable_ioc and self.ask_order_alive_tick > self.ioc_intervel
+            cancel_ask = False
+            if self.enable_ioc and self.ask_order_alive_tick > self.ioc_intervel:
+                self.write_log(f"当前卖单保持时间{self.ask_order_alive_tick} 超过 {self.ioc_intervel}")
+                cancel_ask = True
             if not cancel_ask:
                 # if price check fail
                 min_ask_price = getattr(tick, f"ask_price_{self.min_order_level - 1}") if self.min_order_level > 1 else market_price
@@ -145,7 +148,10 @@ class LiquidMiningAlgo(AlgoTemplate):
         if self.vt_bid_orderid != "":
             self.bid_order_alive_tick += 1
             # if time to kill
-            cancel_bid = self.enable_ioc and self.bid_order_alive_tick > self.ioc_intervel
+            cancel_bid = False
+            if self.enable_ioc and self.bid_order_alive_tick > self.ioc_intervel:
+                self.write_log(f"当前买单保持时间{self.ask_order_alive_tick} 超过 {self.ioc_intervel}")
+                cancel_bid = True
             if not cancel_bid:
                 # if price check fail
                 max_bid_price = getattr(tick, f"bid_price_{self.min_order_level - 1}") if self.min_order_level > 1 else market_price
@@ -157,6 +163,7 @@ class LiquidMiningAlgo(AlgoTemplate):
                 if self.vt_bid_price > max_bid_price:
                     cancel_bid = True
                     self.write_log(f"当前买单{self.vt_bid_price} 高于最高买{self.min_order_level}价 {max_bid_price:.3f}，取消")
+
             if cancel_bid:
                 self.cancel_order(self.vt_bid_orderid)
                 # self.bid_order_alive_tick = 0
@@ -221,8 +228,10 @@ class LiquidMiningAlgo(AlgoTemplate):
     def on_trade(self, trade: TradeData):
         """"""
         if trade.direction == Direction.SHORT:
+            self.write_log(f"流动性挖矿卖出成交，价:{trade.price}, 量:{trade.volume}")
             self.pos -= trade.volume
         elif trade.direction == Direction.LONG:
+            self.write_log(f"流动性挖矿买入成交，价:{trade.price}, 量:{trade.volume}")
             self.pos += trade.volume
 
         self.put_variables_event()
