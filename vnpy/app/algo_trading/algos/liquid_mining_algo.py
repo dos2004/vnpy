@@ -112,6 +112,7 @@ class LiquidMiningAlgo(AlgoTemplate):
         random.seed(time.time())
         self.write_log("开始 流动性挖矿")
         self.pricetick = self.algo_engine.main_engine.get_contract(self.vt_symbol).pricetick
+        self.volumetick = self.algo_engine.main_engine.get_contract(self.vt_symbol).min_volume
         assert self.pricetick > 0
 
     def on_tick(self, tick: TickData):
@@ -179,7 +180,6 @@ class LiquidMiningAlgo(AlgoTemplate):
 
         use_max_volume = self.max_volume_ratio > 0
         max_volume_ratio = self.max_volume_ratio
-
         market_price = (self.last_tick.ask_price_1 + self.last_tick.bid_price_1) / 2
         if self.vt_ask_orderid == "":
             min_ask_price = getattr(self.last_tick, f"ask_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
@@ -191,9 +191,8 @@ class LiquidMiningAlgo(AlgoTemplate):
                 volume = self.volume if not use_max_volume else max_volume * max_volume_ratio
                 if volume >= max_volume:
                     volume = max_volume
-                volume = round_to(volume - 0.01, 0.01)
                 self.write_log(f"流动性挖矿卖出，价:{self.vt_ask_price}, 量:{volume}")
-                self.vt_ask_orderid = self.sell(self.vt_symbol, self.vt_ask_price, volume)
+                self.vt_ask_orderid = self.sell(self.vt_symbol, self.vt_ask_price, round_to(volume, self.volumetick))
 
         if self.vt_bid_orderid == "":
             max_bid_price = getattr(self.last_tick, f"bid_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
@@ -205,9 +204,8 @@ class LiquidMiningAlgo(AlgoTemplate):
                 volume = self.volume if not use_max_volume else max_volume * max_volume_ratio
                 if volume >= max_volume:
                     volume = max_volume
-                volume = round_to(volume - 0.01, 0.01)
                 self.write_log(f"流动性挖矿买入，价:{self.vt_bid_price}, 量:{volume}")
-                self.vt_bid_orderid = self.buy(self.vt_symbol, self.vt_bid_price, volume)
+                self.vt_bid_orderid = self.buy(self.vt_symbol, self.vt_bid_price, round_to(volume, self.volumetick))
         self.put_variables_event()
 
     def on_order(self, order: OrderData):
