@@ -219,18 +219,22 @@ class LiquidMiningAlgo(AlgoTemplate):
         """"""
         if order.vt_orderid == self.vt_ask_orderid:
             if not order.is_active():
+                self.write_log(f"流动性挖矿卖单{order.vt_orderid}完成")
                 self.vt_ask_orderid = ""
                 self.vt_ask_price = 0.0
                 self.pos -= order.traded
                 if self.hedge_enable and order.traded != 0:
+                    self.write_log(f"流动性挖矿对冲{order.vt_orderid}，价:{order.price}, 量:{order.traded}")
                     hedge_bid_orderid = self.buy(self.vt_symbol, order.price, order.traded)
                     self.hedges.append(hedge_bid_orderid)
         elif order.vt_orderid == self.vt_bid_orderid:
             if not order.is_active():
+                self.write_log(f"流动性挖矿买单{order.vt_orderid}完成")
                 self.vt_bid_orderid = ""
                 self.vt_bid_price = 0.0
                 self.pos += order.traded
                 if self.hedge_enable and order.traded != 0:
+                    self.write_log(f"流动性挖矿对冲{order.vt_orderid}，价:{order.price}, 量:{order.traded}")
                     hedge_ask_orderid = self.sell(self.vt_symbol, order.price, order.traded)
                     self.hedges.append(hedge_ask_orderid)
         elif order.vt_orderid in self.hedges:
