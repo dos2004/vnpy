@@ -232,7 +232,7 @@ class LiquidMiningAlgo(AlgoTemplate):
                 self.pos += order.traded
                 if self.hedge_enable and order.traded != 0:
                     hedge_ask_orderid = self.sell(self.vt_symbol, order.price, order.traded)
-                    self.hedges.append(hedge_bid_orderid)
+                    self.hedges.append(hedge_ask_orderid)
         elif order.vt_orderid in self.hedges:
             if not order.is_active():
                 self.hedges.remove(order.vt_orderid)
