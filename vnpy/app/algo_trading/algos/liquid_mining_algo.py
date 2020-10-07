@@ -73,6 +73,7 @@ class LiquidMiningAlgo(AlgoTemplate):
         self.vt_ask_price = 0.0
         self.vt_bid_orderid = ""
         self.vt_bid_price = 0.0
+        self.hedges = []
 
         self.last_tick = None
         self._init_market_accounts(self.vt_symbol)
