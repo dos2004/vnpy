@@ -192,13 +192,11 @@ class LiquidMiningAlgo(AlgoTemplate):
             vt_ask_price = round_to(min_ask_price + self.pricetick, self.pricetick)
             ask_price_delta = vt_ask_price / self.last_ask_price
             self.write_log(f"---> 流动性挖矿卖出last_ask_price: {self.last_ask_price}, ask_price_delta: {ask_price_delta}")
-            if self.last_ask_price < 0.01 or ((vt_ask_price > self.last_ask_price * 0.85) and (vt_ask_price < self.last_ask_price * 1.18)):
+            if self.last_ask_price < 0.01 or ((vt_ask_price > self.last_ask_price * 0.91) and (vt_ask_price < self.last_ask_price * 1.1)):
                 self.vt_ask_price = vt_ask_price
                 self.last_ask_price = vt_ask_price
                 max_volume = self.current_balance[self.market_vt_tokens[0]]
                 ask_volume = self.volume * total_ask_volume
-                if ask_volume < 5000:
-                    ask_volume = 5000
                 volume = ask_volume if not use_max_volume else max_volume * max_volume_ratio
                 if volume >= max_volume:
                     volume = max_volume
@@ -214,14 +212,11 @@ class LiquidMiningAlgo(AlgoTemplate):
             vt_bid_price = round_to(max_bid_price - self.pricetick, self.pricetick)
             bid_price_delta = vt_bid_price / self.last_bid_price
             self.write_log(f"---> 流动性挖矿买入last_bid_price: {self.last_bid_price}, bid_price_delta: {bid_price_delta}")
-            if self.last_bid_price < 0.01 or ((vt_bid_price > self.last_bid_price * 0.85) and (vt_bid_price < self.last_bid_price * 1.18)):
+            if self.last_bid_price < 0.01 or ((vt_bid_price > self.last_bid_price * 0.91) and (vt_bid_price < self.last_bid_price * 1.1)):
                 self.vt_bid_price = vt_bid_price
                 self.last_bid_price = vt_bid_price
-                # max_volume = self.current_balance[self.market_vt_tokens[1]] / self.vt_bid_price
-                max_volume = 14100
+                max_volume = self.current_balance[self.market_vt_tokens[1]] / self.vt_bid_price
                 bid_volume = self.volume * total_bid_volume
-                if bid_volume < 5000:
-                    bid_volume = 5000
                 volume = bid_volume if not use_max_volume else max_volume * max_volume_ratio
                 if volume >= max_volume:
                     volume = max_volume
