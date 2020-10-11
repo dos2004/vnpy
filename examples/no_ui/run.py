@@ -38,14 +38,17 @@ loopring_dex_setting = {
 algo_trading_setting = {
     "template_name": "LiquidMiningAlgo",
     "vt_symbol": "LRC-USDT.LOOPRING",
-    "price_offset": 0.7,
-    "price_tolerance": 0.3,
-    "volume": 1000,
+    "price_offset": 0.05,
+    "price_offset_max": 0.1,
+    "volume": 2,
     "max_volume_ratio": 0,
-    "interval": 30,
-    "min_order_level": 3,
-    "min_pos": -5000,
-    "max_pos": 5000
+    "interval": 2,
+    "min_order_level": 1,
+    "sell_max_volume": 0,
+    "buy_max_volume": 0,
+    "auto_trade_volume": 310,
+    "min_pos": -50000,
+    "max_pos": 50000
 }
 
 def run_child_algo():
