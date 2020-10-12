@@ -84,6 +84,8 @@ class LiquidMiningAlgo(AlgoTemplate):
         self.last_bid_price = 0.00000001
         self.last_ask_volume = 0.0
         self.last_bid_volume = 0.0
+        self.total_ask_volume = 0.0
+        self.total_bid_volume = 0.0
 
         self.last_tick = None
         self._init_market_accounts(self.vt_symbol)
@@ -135,28 +137,40 @@ class LiquidMiningAlgo(AlgoTemplate):
 
         market_price = (tick.ask_price_1 + tick.bid_price_1) / 2
         if self.vt_ask_orderid != "":
+            total_ask_volume = 0
+            for num_level in range(1, self.min_order_level + 1):
+                total_ask_volume += getattr(self.last_tick, f"ask_volume_{num_level}")
             cancel_ask = False
             min_ask_price = getattr(tick, f"ask_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
             vt_ask_price = round_to(min_ask_price + self.pricetick, self.pricetick)
             if self.vt_ask_price < vt_ask_price:
                 cancel_ask = True
                 self.write_log(f"当前卖单{self.vt_ask_price} 低于最新卖{self.min_order_level}价 {vt_ask_price}，取消")
-            if self.vt_ask_price > vt_ask_price:
+            elif self.vt_ask_price > vt_ask_price:
                 cancel_ask = True
                 self.write_log(f"当前卖单{self.vt_ask_price} 高于最新卖{self.min_order_level}价 {vt_ask_price}，取消")
+            elif self.total_ask_volume != total_ask_volume:
+                cancel_ask = True
+                self.write_log(f"---> 当前卖单{self.vt_ask_price} 取消，因为之前的订单量发生了变化")
             if cancel_ask:
                 self.cancel_order(self.vt_ask_orderid)
 
         if self.vt_bid_orderid != "":
+            total_bid_volume = 0
+            for num_level in range(1, self.min_order_level + 1):
+                total_bid_volume += getattr(self.last_tick, f"bid_volume_{num_level}")
             cancel_bid = False
             max_bid_price = getattr(tick, f"bid_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
             vt_bid_price = round_to(max_bid_price - self.pricetick, self.pricetick)
             if self.vt_bid_price > vt_bid_price:
                 cancel_bid = True
                 self.write_log(f"当前买单{self.vt_bid_price} 高于最新买{self.min_order_level}价 {vt_bid_price}，取消")
-            if self.vt_bid_price < vt_bid_price:
+            elif self.vt_bid_price < vt_bid_price:
                 cancel_bid = True
                 self.write_log(f"当前买单{self.vt_bid_price} 低于最新买{self.min_order_level}价 {vt_bid_price}，取消")
+            elif self.total_bid_volume != total_bid_volume:
+                cancel_bid = True
+                self.write_log(f"---> 当前买单{self.vt_bid_price} 取消，因为之前的订单量发生了变化")
             if cancel_bid:
                 self.cancel_order(self.vt_bid_orderid)
 
@@ -201,6 +215,7 @@ class LiquidMiningAlgo(AlgoTemplate):
                         self.origin_ask_price = vt_ask_price
                     self.last_ask_price = vt_ask_price
                     self.vt_ask_price = vt_ask_price
+                    self.total_ask_volume = total_ask_volume
                     max_volume = self.current_balance[self.market_vt_tokens[0]]
                     if 0 < self.sell_max_volume < max_volume:
                         max_volume = self.sell_max_volume
@@ -237,6 +252,7 @@ class LiquidMiningAlgo(AlgoTemplate):
                         self.origin_bid_price = vt_bid_price
                     self.last_bid_price = vt_bid_price
                     self.vt_bid_price = vt_bid_price
+                    self.total_bid_volume = total_bid_volume
                     max_volume = self.current_balance[self.market_vt_tokens[1]] / self.vt_bid_price
                     if 0 < self.buy_max_volume < max_volume:
                         max_volume = self.buy_max_volume
