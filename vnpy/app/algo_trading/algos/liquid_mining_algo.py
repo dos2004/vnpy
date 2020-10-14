@@ -206,17 +206,19 @@ class LiquidMiningAlgo(AlgoTemplate):
             for num_level in range(1, self.min_order_level + 1):
                 total_ask_volume += getattr(self.last_tick, f"ask_volume_{num_level}")
             if total_ask_volume != self.last_ask_volume:
+                one_ask_price = getattr(self.last_tick, f"ask_price_1")
+                one_ask_volume = getattr(self.last_tick, f"ask_volume_1")
                 min_ask_price = getattr(self.last_tick, f"ask_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
                 vt_ask_price = round_to(min_ask_price + self.pricetick, self.pricetick)
+                if self.origin_ask_price == 0.00000002:
+                    self.origin_ask_price = vt_ask_price
                 ask_condition0 = self.last_ask_price == 0.00000002
                 ask_condition1 = (self.last_ask_price * (1 - self.price_offset)) < vt_ask_price < (self.last_ask_price * (1 + self.price_offset))
                 ask_condition2 = vt_ask_price > (self.origin_ask_price * (1 - self.price_offset_max))
                 ask_condition3 = vt_ask_price > self.last_bid_price
-                ask_condition8 = vt_ask_price < (self.last_ask_price * (1 - self.price_offset))
+                ask_condition8 = one_ask_price < (self.origin_ask_price * (1 - self.price_offset_max * 2))
                 self.write_log(f"---> 流动性挖矿卖出condition1: {ask_condition1}, condition2: {ask_condition2}, condition3: {ask_condition3}")
                 if ask_condition0 or (ask_condition1 and ask_condition2 and ask_condition3):
-                    if self.origin_ask_price == 0.00000002:
-                        self.origin_ask_price = vt_ask_price
                     self.last_ask_price = vt_ask_price
                     self.vt_ask_price = vt_ask_price
                     self.total_ask_volume = total_ask_volume
@@ -232,9 +234,9 @@ class LiquidMiningAlgo(AlgoTemplate):
                     self.last_ask_volume = round_to(volume - self.volumetick, self.volumetick)
                     self.write_log(f"流动性挖矿卖出价格: {self.vt_ask_price}, 量: {self.last_ask_volume}")
                     self.vt_ask_orderid = self.sell(self.vt_symbol, self.vt_ask_price, self.last_ask_volume)
-                elif ask_condition8 and self.min_order_level == 1 and total_ask_volume < self.auto_trade_volume:
-                    self.write_log(f"---> 流动性挖矿买入低价min_ask_price: {min_ask_price}, total_ask_volume: {total_ask_volume}")
-                    self.buy(self.vt_symbol, min_ask_price, total_ask_volume)
+                elif ask_condition8 and one_ask_volume < self.auto_trade_volume:
+                    self.write_log(f"---> 流动性挖矿买入低价one_ask_price: {one_ask_price}, one_ask_volume: {one_ask_volume}")
+                    self.buy(self.vt_symbol, one_ask_price, one_ask_volume)
             else:
                 self.write_log(f"---> 流动性挖矿卖出下单失败，因为卖单总数量等于上一单数量")
 
@@ -243,17 +245,19 @@ class LiquidMiningAlgo(AlgoTemplate):
             for num_level in range(1, self.min_order_level + 1):
                 total_bid_volume += getattr(self.last_tick, f"bid_volume_{num_level}")
             if total_bid_volume != self.last_bid_volume:
+                one_bid_price = getattr(self.last_tick, f"bid_price_1")
+                one_bid_volume = getattr(self.last_tick, f"bid_volume_1")
                 max_bid_price = getattr(self.last_tick, f"bid_price_{self.min_order_level}") if self.min_order_level > 0 else market_price
                 vt_bid_price = round_to(max_bid_price - self.pricetick, self.pricetick)
+                if self.origin_bid_price == 0.00000001:
+                    self.origin_bid_price = vt_bid_price
                 bid_condition0 = self.last_bid_price == 0.00000001
                 bid_condition1 = (self.last_bid_price * (1 - self.price_offset)) < vt_bid_price < (self.last_bid_price * (1 + self.price_offset))
                 bid_condition2 = vt_bid_price < (self.origin_bid_price * (1 + self.price_offset_max))
                 bid_condition3 = vt_bid_price < self.last_ask_price
-                bid_condition8 = vt_bid_price > (self.last_bid_price * (1 + self.price_offset))
+                bid_condition8 = one_bid_price > (self.origin_bid_price * (1 + self.price_offset_max * 2))
                 self.write_log(f"---> 流动性挖矿买入condition1: {bid_condition1}, condition2: {bid_condition2}, condition3: {bid_condition3}")
                 if bid_condition0 or (bid_condition1 and bid_condition2 and bid_condition3):
-                    if self.origin_bid_price == 0.00000001:
-                        self.origin_bid_price = vt_bid_price
                     self.last_bid_price = vt_bid_price
                     self.vt_bid_price = vt_bid_price
                     self.total_bid_volume = total_bid_volume
@@ -269,9 +273,9 @@ class LiquidMiningAlgo(AlgoTemplate):
                     self.last_bid_volume = round_to(volume - self.volumetick, self.volumetick)
                     self.write_log(f"流动性挖矿买入价格: {self.vt_bid_price}, 量: {self.last_bid_volume}")
                     self.vt_bid_orderid = self.buy(self.vt_symbol, self.vt_bid_price, self.last_bid_volume)
-                elif bid_condition8 and self.min_order_level == 1 and total_bid_volume < self.auto_trade_volume:
-                    self.write_log(f"---> 流动性挖矿卖出高价max_bid_price: {max_bid_price}, total_bid_volume: {total_bid_volume}")
-                    self.sell(self.vt_symbol, max_bid_price, total_bid_volume)
+                elif bid_condition8 and one_bid_volume < self.auto_trade_volume:
+                    self.write_log(f"---> 流动性挖矿卖出高价one_bid_price: {one_bid_price}, one_bid_volume: {one_bid_volume}")
+                    self.sell(self.vt_symbol, one_bid_price, one_bid_volume)
             else:
                 self.write_log(f"---> 流动性挖矿买入下单失败，因为买单总数量等于上一单数量")
         self.put_variables_event()
