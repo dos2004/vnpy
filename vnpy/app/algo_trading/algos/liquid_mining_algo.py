@@ -25,12 +25,14 @@ class LiquidMiningAlgo(AlgoTemplate):
         "price_offset_max": 0.1,
         "volume": 2,
         "max_volume_ratio": 0,
-        "interval": 2,
+        "interval": 3,
         "min_order_level": 1,
         "min_order_volume": 0,
         "sell_max_volume": 0,
         "buy_max_volume": 0,
         "auto_trade_volume": 310,
+        "sell_max_ratio": 1,
+        "buy_max_ratio": 1,
         "min_pos": 50000,
         "max_pos": 50000,
     }
@@ -64,6 +66,8 @@ class LiquidMiningAlgo(AlgoTemplate):
         self.sell_max_volume    = setting["sell_max_volume"]
         self.buy_max_volume     = setting["buy_max_volume"]
         self.auto_trade_volume  = setting["auto_trade_volume"]
+        self.sell_max_ratio     = setting["sell_max_ratio"]
+        self.buy_max_ratio      = setting["buy_max_ratio"]
         self.min_pos            = setting["min_pos"]
         self.max_pos            = setting["max_pos"]
 
@@ -216,7 +220,7 @@ class LiquidMiningAlgo(AlgoTemplate):
                     self.last_ask_price = vt_ask_price
                     self.vt_ask_price = vt_ask_price
                     self.total_ask_volume = total_ask_volume
-                    max_volume = self.current_balance[self.market_vt_tokens[0]]
+                    max_volume = self.current_balance[self.market_vt_tokens[0]] * self.sell_max_ratio
                     if 0 < self.sell_max_volume < max_volume:
                         max_volume = self.sell_max_volume
                     min_volume = self.volume * total_ask_volume
@@ -253,7 +257,7 @@ class LiquidMiningAlgo(AlgoTemplate):
                     self.last_bid_price = vt_bid_price
                     self.vt_bid_price = vt_bid_price
                     self.total_bid_volume = total_bid_volume
-                    max_volume = self.current_balance[self.market_vt_tokens[1]] / self.vt_bid_price
+                    max_volume = self.current_balance[self.market_vt_tokens[1]] * self.buy_max_ratio / self.vt_bid_price
                     if 0 < self.buy_max_volume < max_volume:
                         max_volume = self.buy_max_volume
                     min_volume = self.volume * total_bid_volume
