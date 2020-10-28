@@ -215,7 +215,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             self.ask_order_level = 0
             for num_level in range(self.min_order_level, 0, -1):
                 ask_price = getattr(self.last_tick, f"ask_price_{num_level}")
-                if 0 < ask_price < market_price * (1 + self.reward_ratio * 0.65):
+                if 0 < ask_price < market_price * (1 + self.reward_ratio * 0.9):
                     self.ask_order_level = num_level
                     break
             if self.ask_order_level > 0:
@@ -262,7 +262,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             self.bid_order_level = 0
             for num_level in range(self.min_order_level, 0, -1):
                 bid_price = getattr(self.last_tick, f"bid_price_{num_level}")
-                if bid_price > market_price * (1 - self.reward_ratio * 0.65):
+                if bid_price > market_price * (1 - self.reward_ratio * 0.9):
                     self.bid_order_level = num_level
                     break
             if self.bid_order_level > 0:
