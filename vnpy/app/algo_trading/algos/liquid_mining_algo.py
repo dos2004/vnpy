@@ -160,7 +160,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             elif self.vt_ask_price > vt_ask_price:
                 cancel_ask = True
                 self.write_log(f"当前卖单{self.vt_ask_price} 高于最新卖{self.ask_order_level}价 {vt_ask_price}，取消")
-            elif abs(self.total_ask_volume - total_ask_volume) > (self.total_ask_volume / 2):
+            elif abs(self.total_ask_volume - total_ask_volume) > (self.total_ask_volume / 3):
                 cancel_ask = True
                 self.write_log(f"---> 当前卖单{self.vt_ask_price} 取消，因为之前的订单量发生了变化")
             if cancel_ask:
@@ -182,7 +182,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             elif self.vt_bid_price < vt_bid_price:
                 cancel_bid = True
                 self.write_log(f"当前买单{self.vt_bid_price} 低于最新买{self.bid_order_level}价 {vt_bid_price}，取消")
-            elif abs(self.total_bid_volume - total_bid_volume) > (self.total_bid_volume / 2):
+            elif abs(self.total_bid_volume - total_bid_volume) > (self.total_bid_volume / 3):
                 cancel_bid = True
                 self.write_log(f"---> 当前买单{self.vt_bid_price} 取消，因为之前的订单量发生了变化")
             if cancel_bid:
@@ -215,7 +215,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             self.ask_order_level = 0
             for num_level in range(self.min_order_level, 0, -1):
                 ask_price = getattr(self.last_tick, f"ask_price_{num_level}")
-                if 0 < ask_price < market_price * (1 + self.reward_ratio * 0.9):
+                if 0 < ask_price < market_price * (1 + self.reward_ratio * 0.99):
                     self.ask_order_level = num_level
                     break
             if self.ask_order_level > 0:
@@ -262,7 +262,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             self.bid_order_level = 0
             for num_level in range(self.min_order_level, 0, -1):
                 bid_price = getattr(self.last_tick, f"bid_price_{num_level}")
-                if bid_price > market_price * (1 - self.reward_ratio * 0.9):
+                if bid_price > market_price * (1 - self.reward_ratio * 0.99):
                     self.bid_order_level = num_level
                     break
             if self.bid_order_level > 0:
