@@ -10,7 +10,7 @@ from vnpy.event import EventEngine
 from vnpy.trader.setting import SETTINGS
 from vnpy.trader.engine import MainEngine
 
-from vnpy.gateway.loopring import LoopringGateway
+from vnpy.gateway.loopringv36 import LoopringV36Gateway
 from vnpy.app.cta_strategy import CtaStrategyApp
 from vnpy.app.algo_trading import AlgoTradingApp
 from vnpy.app.cta_strategy.base import EVENT_CTA_LOG
@@ -23,28 +23,30 @@ SETTINGS["log.console"] = True
 
 
 loopring_dex_setting = {
-    "name" : "流动性挖矿账户",
-    "exchangeName": "LoopringDEX: Beta 1",
-    "exchangeAddress": "0x944644Ea989Ec64c2Ab9eF341D383cEf586A5777",
-    "exchangeId": 2,
-    "accountAddress": "1",
-    "accountId": 1,
-    "apiKey": "1",
-    "publicKeyX": "1",
-    "publicKeyY": "1",
-    "privateKey": "1",
+    "name" : "Liquid Mining Account",
+    "exchangeName": "LoopringDEX V2",
+    "exchangeAddress": "0x0BABA1Ad5bE3a5C0a66E7ac838a129Bf948f1eA4",
+    "accountAddress": "",
+    "accountId": ,
+    "apiKey": "",
+    "publicKeyX": "",
+    "publicKeyY": "",
+    "eddsaKey": ""
 }
 
 algo_trading_setting = {
     "template_name": "LiquidMiningAlgo",
-    "vt_symbol": "LRC-USDT.LOOPRING",
-    "price_offset": 0.7,
-    "price_tolerance": 0.3,
+    "vt_symbol": "USDC-USDT.LOOPRINGV36",
+    "price_offset": 0.05,
+    "price_tolerance": 0.05,
     "volume": 1000,
-    "interval": 30,
-    "min_order_level": 3,
+    "interval": 5,
+    "min_order_level": 1,
     "min_pos": -5000,
-    "max_pos": 5000
+    "max_pos": 5000,
+    "enable_ioc": True,
+    "ioc_interval": 2,
+    "hedge_enable": True
 }
 
 def run_child_algo():
@@ -62,7 +64,7 @@ def run_child_algo():
     event_engine = EventEngine()
     main_engine = MainEngine(event_engine)
     algo_engine : AlgoEngine = main_engine.add_app(AlgoTradingApp)
-    loopring_gateway = main_engine.add_gateway(LoopringGateway)
+    loopring_gateway = main_engine.add_gateway(LoopringV36Gateway)
 
     log_engine = main_engine.get_engine("log")
     event_engine.register(EVENT_ALGO_LOG, log_engine.process_log_event)
