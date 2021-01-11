@@ -6,7 +6,6 @@ websocket-client
 peewee
 pymysql
 numpy
-pandas==0.24.2
 ta-lib
 tzlocal
 ujson
