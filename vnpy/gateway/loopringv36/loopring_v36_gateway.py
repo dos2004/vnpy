@@ -42,7 +42,7 @@ from vnpy.trader.object import (
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.trader.setting import SETTINGS
 from vnpy.event import Event
-from vnpy.gateway.loopringv36.loopring_orderId_manager import BaseOrderIdManager, SharedOrderIdManager
+from vnpy.gateway.loopringv36.loopring_orderId_manager import BaseOrderIdManager
 from vnpy.gateway.loopringv36.eddsa_utils import *
 
 from vnpy.gateway.loopring.ethsnarks.eddsa import PoseidonEdDSA
