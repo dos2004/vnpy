@@ -60,6 +60,7 @@ class LiquidMiningAlgo(AlgoTemplate):
         self.max_pos            = setting["max_pos"]
         self.enable_ioc         = setting.get("enable_ioc", False)
         self.ioc_intervel       = setting.get("ioc_interval", self.interval)
+        self.hedge_enable       = setting.get("hedge_enable", False)
 
         # validate setting
         assert self.price_tolerance <= self.price_offset
@@ -72,6 +73,7 @@ class LiquidMiningAlgo(AlgoTemplate):
         self.vt_ask_price = 0.0
         self.vt_bid_orderid = ""
         self.vt_bid_price = 0.0
+        self.hedges = []
 
         self.last_tick = None
         self._init_market_accounts(self.vt_symbol)
@@ -219,22 +221,42 @@ class LiquidMiningAlgo(AlgoTemplate):
         """"""
         if order.vt_orderid == self.vt_ask_orderid:
             if not order.is_active():
+                self.write_log(f"流动性挖矿卖单{order.vt_orderid}完成")
                 self.vt_ask_orderid = ""
                 self.vt_ask_price = 0.0
+                self.pos -= order.traded
+                if self.hedge_enable and order.traded != 0:
+                    self.write_log(f"流动性挖矿对冲{order.vt_orderid}，价:{order.price}, 量:{order.traded}")
+                    hedge_bid_orderid = self.buy(self.vt_symbol, order.price, order.traded)
+                    self.hedges.append(hedge_bid_orderid)
         elif order.vt_orderid == self.vt_bid_orderid:
             if not order.is_active():
+                self.write_log(f"流动性挖矿买单{order.vt_orderid}完成")
                 self.vt_bid_orderid = ""
                 self.vt_bid_price = 0.0
+                self.pos += order.traded
+                if self.hedge_enable and order.traded != 0:
+                    self.write_log(f"流动性挖矿对冲{order.vt_orderid}，价:{order.price}, 量:{order.traded}")
+                    hedge_ask_orderid = self.sell(self.vt_symbol, order.price, order.traded)
+                    self.hedges.append(hedge_ask_orderid)
+        elif order.vt_orderid in self.hedges:
+            if not order.is_active():
+                self.hedges.remove(order.vt_orderid)
+                if order.direction == Direction.LONG:
+                    self.pos += order.traded
+                elif order.direction == Direction.SHORT:
+                    self.pos -= order.traded
+
         self.put_variables_event()
 
     def on_trade(self, trade: TradeData):
         """"""
         if trade.direction == Direction.SHORT:
             self.write_log(f"流动性挖矿卖单{trade.vt_orderid}成交，价:{trade.price}, 量:{trade.volume}")
-            self.pos -= trade.volume
         elif trade.direction == Direction.LONG:
             self.write_log(f"流动性挖矿买单{trade.vt_orderid}成交，价:{trade.price}, 量:{trade.volume}")
-            self.pos += trade.volume
+        elif trade.vt_orderid in self.hedges:
+            self.write_log(f"流动性对冲单{trade.vt_orderid}成交，价:{trade.price}, 量:{trade.volume}")
 
         self.put_variables_event()
 
