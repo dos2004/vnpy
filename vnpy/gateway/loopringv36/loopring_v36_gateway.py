@@ -1189,8 +1189,26 @@ class LoopringTradeWebsocketApi(WebsocketClient):
             datetime=datetime.fromtimestamp(float(packet["ts"]) / 1000).__str__(),
             gateway_name=self.gateway_name
         )
-
+        previous_traded = 0
+        previous_order_status = self.gateway.orders.get(order.orderid, None)
+        if previous_order_status:
+            previous_traded = previous_order_status.traded
         self.gateway.on_order(order)
+
+        order_traded = order.traded - previous_traded
+        if order_traded > 0:
+            trade = TradeData(
+                symbol=market,
+                exchange=Exchange.LOOPRING,
+                orderid=order.orderid,
+                tradeid=order.orderid,
+                direction=order.direction,
+                price=order.price,
+                volume=order_traded,
+                datetime=order.datetime,
+                gateway_name=self.gateway_name,
+            )
+            self.gateway.on_trade(trade)
 
     @staticmethod
     def unpack_data(data: str):
