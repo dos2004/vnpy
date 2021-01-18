@@ -129,6 +129,7 @@ class LoopringV36Gateway(BaseGateway):
 
         # order records
         self.orders = {}
+        self.orderIdHashMap = {}
 
         # self.event_engine.register(EVENT_TIMER, self.process_timer_event)
 
@@ -201,16 +202,19 @@ class LoopringV36Gateway(BaseGateway):
         for ws_api in self.market_ws_apis:
             ws_api.stop()
 
-    def on_order(self, order: OrderData):
+    def on_order(self, order: OrderData, hash = None):
         """"""
         if order.is_active():
             self.orders[order.orderid] = order
+            if hash is not None:
+                self.orderIdHashMap[order.orderid] = hash
         elif order.status in [Status.CANCEL_REJECT, Status.CANCELLING]:
             # this mean the order is still active in srv, and will
             # be cancelled soon, so we keep order for a while.
             pass
         else:
             self.orders.pop(order.orderid, None)
+            self.orderIdHashMap.pop(order.orderid, None)
         super().on_order(order)
 
     def process_timer_event(self, event: Event):
@@ -448,9 +452,22 @@ class LoopringRestApi(RestClient):
             data=data
         )
 
-    def query_order(self):
+    def query_order(self, hash):
         """"""
-        raise NotImplementedError("Using query_orders")
+        data = {"security": Security.API_KEY}
+
+        params = {
+            "accountId": self.accountId,
+            "hash" : hash
+        }
+
+        self.add_request(
+            method="GET",
+            path="/api/v2/order",
+            callback=self.on_query_order,
+            params=params,
+            data=data
+        )
 
     def query_orders(self, offset = 0):
         """"""
@@ -533,7 +550,7 @@ class LoopringRestApi(RestClient):
             tokenSId, tokenBId = tokenBId, tokenSId
             amountS, amountB = amountB, amountS
 
-        clientOrderId = str(self.connect_time) + "-"+ str(self._new_order_id())
+        clientOrderId = "liquidmining" + str(self.connect_time + self._new_order_id())
         vt_order = req.create_order_data(
             orderid=clientOrderId,
             gateway_name=self.gateway_name
@@ -543,9 +560,6 @@ class LoopringRestApi(RestClient):
             orderId = self.failed_orderId[tokenSId].pop(0)
         else:
             orderId = self.orderId_manager.get_orderId(tokenSId)
-
-        self.gateway.write_log(f"Order: {req.direction} {req.price} {req.volume} orderId {orderId} clientOrderId {clientOrderId}")
-        self.gateway.on_order(vt_order)
 
         # ahead 1 hour
         validSince = int(time.time()) - self.time_offset - 3600
@@ -585,6 +599,8 @@ class LoopringRestApi(RestClient):
             "eddsaSignature" : signedMessage
         })
 
+        self.gateway.write_log(f"Order: {req.direction} {req.price} {req.volume} orderId {orderId} clientOrderId {clientOrderId}")
+        self.gateway.on_order(vt_order, msgHash)
         # self.gateway.write_log(f"create new order {newOrder}")
         return True, vt_order, newOrder
 
@@ -702,6 +718,27 @@ class LoopringRestApi(RestClient):
         self.orderId_manager.put_orderId(tokenId, int(data['orderId']))
         self.offchainId_manager.put_orderId(tokenId, int(data['offchainId']))
 
+    def on_query_order(self, data, request):
+        # self.gateway.write_log(f"on_query_orders {data}")
+        order = data['data']
+        # TODO: use correct decimals to calc volume
+        decimals = self.contracts[order['market']].decimals
+        volume = int(order["size"])/(10**decimals)
+        order_data = OrderData(
+            orderid=order["clientOrderId"],
+            symbol=order["market"],
+            exchange=Exchange.LOOPRING,
+            price=float(order["price"]),
+            volume=volume,
+            type=OrderType.LIMIT,
+            direction=DIRECTION_LOOPRING2VT[order["side"]],
+            status=STATUS_LOOPRING2VT.get(order["status"], "processing"),
+            datetime=datetime.fromtimestamp(float(order['createdAt']) / 1000).__str__(),
+            gateway_name=self.gateway_name,
+        )
+        self.gateway.on_order(order_data, order['hash'])
+        self.gateway.write_log(f"Order查询成功:\n{order}")
+
     def on_query_orders(self, data, request):
         # self.gateway.write_log(f"on_query_orders {data}")
 
@@ -723,7 +760,7 @@ class LoopringRestApi(RestClient):
                 datetime=datetime.fromtimestamp(float(order['validity']['start'])).__str__(),
                 gateway_name=self.gateway_name,
             )
-            self.gateway.on_order(order_data)
+            self.gateway.on_order(order_data, order['hash'])
 
         if request.extra + len(data['orders']) < data['totalNum']:
             self.query_orders(request.extra + len(data['orders']))
@@ -906,10 +943,13 @@ class LoopringRestApi(RestClient):
                     if "resultInfo" in data and "CANCELLED" in data['resultInfo']['message']:
                         order = self.gateway.orders[id]
                         order.status = Status.CANCELLED
-                        self.gateway.on_order(order)
+                        hash = self.gateway.orderIdHashMap.get(id, None)
+                        if not hash:
+                            self.gateway.rest_api.query_order(hash)
                     elif "COMPLETELY_FILLED" in data['resultInfo']['message']:
                         order = self.gateway.orders[id]
                         order.status = Status.ALLTRADED
+                        order.traded = order.volume
                         self.gateway.on_order(order)
                     else:
                         order.status = Status.CANCEL_REJECT
@@ -1090,6 +1130,7 @@ class LoopringTradeWebsocketApi(WebsocketClient):
         # self.gateway.rest_api.query_orders()
         for req in self.last_subscribe_reqs.values():
             self.subscribe(req)
+        self.gateway.rest_api.query_balance()
 
     def subscribe(self, req: SubscribeRequest):
         # subscribe
@@ -1172,6 +1213,7 @@ class LoopringTradeWebsocketApi(WebsocketClient):
         data = packet["data"]
         market = data['market']
         orderid = data["clientOrderId"]
+        hash = data["hash"]
         decimals = self.gateway.rest_api.contracts[market].decimals
         status = data["status"]
         if status == "processing" and "filledSize" in data and int(data['filledSize']) > 0:
@@ -1193,7 +1235,7 @@ class LoopringTradeWebsocketApi(WebsocketClient):
         previous_order_status = self.gateway.orders.get(order.orderid, None)
         if previous_order_status:
             previous_traded = previous_order_status.traded
-        self.gateway.on_order(order)
+        self.gateway.on_order(order, hash)
 
         order_traded = order.traded - previous_traded
         if order_traded > 0:
