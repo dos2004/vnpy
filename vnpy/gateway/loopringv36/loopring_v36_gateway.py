@@ -723,17 +723,19 @@ class LoopringRestApi(RestClient):
         order = data['data']
         # TODO: use correct decimals to calc volume
         decimals = self.contracts[order['market']].decimals
-        volume = int(order["size"])/(10**decimals)
+        volume = int(order["volumes"]["baseAmount"])/(10**decimals)
+        traded = int(order["volumes"]["baseFilled"])/(10**decimals)
         order_data = OrderData(
             orderid=order["clientOrderId"],
             symbol=order["market"],
-            exchange=Exchange.LOOPRING,
+            exchange=Exchange.LOOPRINGV36,
             price=float(order["price"]),
             volume=volume,
+            traded=traded,
             type=OrderType.LIMIT,
             direction=DIRECTION_LOOPRING2VT[order["side"]],
             status=STATUS_LOOPRING2VT.get(order["status"], "processing"),
-            datetime=datetime.fromtimestamp(float(order['createdAt']) / 1000).__str__(),
+            datetime=datetime.fromtimestamp(float(order['validity']['start'])).__str__(),
             gateway_name=self.gateway_name,
         )
         self.gateway.on_order(order_data, order['hash'])
