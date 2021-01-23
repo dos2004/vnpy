@@ -33,8 +33,11 @@ class Status(Enum):
     NOTTRADED = "未成交"
     PARTTRADED = "部分成交"
     ALLTRADED = "全部成交"
+    CANCELLING = "撤销中"
     CANCELLED = "已撤销"
+    CANCEL_REJECT = "撤单被拒绝"
     REJECTED = "拒单"
+    EXPIRED = "已过期"
 
 
 class Product(Enum):
@@ -135,6 +138,7 @@ class Exchange(Enum):
     GATEIO = "GATEIO"
     BITSTAMP = "BITSTAMP"
     LOOPRING = "LOOPRING"
+    LOOPRINGV36 = "LOOPRINGV36"
 
     # Special Function
     LOCAL = "LOCAL"         # For local generated data

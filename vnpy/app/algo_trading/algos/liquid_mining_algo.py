@@ -72,6 +72,8 @@ class LiquidMiningAlgo(AlgoTemplate):
         self.reward_ratio       = setting["reward_ratio"]
         self.min_pos            = setting["min_pos"]
         self.max_pos            = setting["max_pos"]
+        self.enable_ioc         = setting.get("enable_ioc", False)
+        self.ioc_intervel       = setting.get("ioc_interval", self.interval)
 
         # validate setting
         assert self.price_offset <= self.price_offset_max
@@ -128,7 +130,6 @@ class LiquidMiningAlgo(AlgoTemplate):
             if type(user_account) is not AccountData:
                 return False
             self.current_balance[vt_token] = user_account.balance
-        # self.write_log(f"当前余额: {self.current_balance}")
         return True
 
     def on_start(self):
@@ -145,48 +146,62 @@ class LiquidMiningAlgo(AlgoTemplate):
 
         market_price = (tick.ask_price_1 + tick.bid_price_1) / 2
         if self.vt_ask_orderid != "":
-            total_ask_volume = 0
-            for num_level in range(1, 6):
-                ask_price = getattr(tick, f"ask_price_{num_level}")
-                if 0 < ask_price < self.last_ask_price:
-                    total_ask_volume += getattr(tick, f"ask_volume_{num_level}")
+            self.ask_order_alive_tick += 1
+            # if time to kill
             cancel_ask = False
-            # min_ask_price = getattr(tick, f"ask_price_{self.ask_order_level}") if self.ask_order_level > 0 else market_price
-            # vt_ask_price = round_to(min_ask_price + self.pricetick, self.pricetick)
-            vt_ask_price = getattr(tick, f"ask_price_1")
-            if self.vt_ask_price < vt_ask_price:
+            if self.enable_ioc and self.ask_order_alive_tick > self.ioc_intervel:
+                self.write_log(f"卖单{self.vt_ask_orderid}有效时间{self.ask_order_alive_tick} ticks > {self.ioc_intervel},取消")
                 cancel_ask = True
-                self.write_log(f"当前卖单{self.vt_ask_price} 低于最新卖{self.ask_order_level}价 {vt_ask_price}，取消")
-            elif self.vt_ask_price > vt_ask_price:
-                cancel_ask = True
-                self.write_log(f"当前卖单{self.vt_ask_price} 高于最新卖{self.ask_order_level}价 {vt_ask_price}，取消")
-            elif abs(self.total_ask_volume - total_ask_volume) > (self.total_ask_volume / 3):
-                cancel_ask = True
-                self.write_log(f"---> 当前卖单{self.vt_ask_price} 取消，因为之前的订单量发生了变化")
+            if not cancel_ask:
+                total_ask_volume = 0
+                for num_level in range(1, 6):
+                    ask_price = getattr(tick, f"ask_price_{num_level}")
+                    if 0 < ask_price < self.last_ask_price:
+                        total_ask_volume += getattr(tick, f"ask_volume_{num_level}")
+                # min_ask_price = getattr(tick, f"ask_price_{self.ask_order_level}") if self.ask_order_level > 0 else market_price
+                # vt_ask_price = round_to(min_ask_price + self.pricetick, self.pricetick)
+                vt_ask_price = getattr(tick, f"ask_price_1")
+                if self.vt_ask_price < vt_ask_price:
+                    cancel_ask = True
+                    self.write_log(f"当前卖单{self.vt_ask_price} 低于最新卖{self.ask_order_level}价 {vt_ask_price}，取消")
+                elif self.vt_ask_price > vt_ask_price:
+                    cancel_ask = True
+                    self.write_log(f"当前卖单{self.vt_ask_price} 高于最新卖{self.ask_order_level}价 {vt_ask_price}，取消")
+                elif abs(self.total_ask_volume - total_ask_volume) > (self.total_ask_volume / 2):
+                    cancel_ask = True
+                    self.write_log(f"---> 当前卖单{self.vt_ask_price} 取消，因为之前的订单量发生了变化")
             if cancel_ask:
                 self.cancel_order(self.vt_ask_orderid)
+                # self.ask_order_alive_tick = 0
 
         if self.vt_bid_orderid != "":
-            total_bid_volume = 0
-            for num_level in range(1, 6):
-                bid_price = getattr(tick, f"bid_price_{num_level}")
-                if bid_price > self.last_bid_price:
-                    total_bid_volume += getattr(tick, f"bid_volume_{num_level}")
+            self.bid_order_alive_tick += 1
+            # if time to kill
             cancel_bid = False
-            # max_bid_price = getattr(tick, f"bid_price_{self.bid_order_level}") if self.bid_order_level > 0 else market_price
-            # vt_bid_price = round_to(max_bid_price - self.pricetick, self.pricetick)
-            vt_bid_price = getattr(tick, f"bid_price_1")
-            if self.vt_bid_price > vt_bid_price:
+            if self.enable_ioc and self.bid_order_alive_tick > self.ioc_intervel:
+                self.write_log(f"买单{self.vt_bid_orderid}有效时间{self.bid_order_alive_tick} ticks > {self.ioc_intervel},取消")
                 cancel_bid = True
-                self.write_log(f"当前买单{self.vt_bid_price} 高于最新买{self.bid_order_level}价 {vt_bid_price}，取消")
-            elif self.vt_bid_price < vt_bid_price:
-                cancel_bid = True
-                self.write_log(f"当前买单{self.vt_bid_price} 低于最新买{self.bid_order_level}价 {vt_bid_price}，取消")
-            elif abs(self.total_bid_volume - total_bid_volume) > (self.total_bid_volume / 3):
-                cancel_bid = True
-                self.write_log(f"---> 当前买单{self.vt_bid_price} 取消，因为之前的订单量发生了变化")
+            if not cancel_bid:
+                total_bid_volume = 0
+                for num_level in range(1, 6):
+                    bid_price = getattr(tick, f"bid_price_{num_level}")
+                    if bid_price > self.last_bid_price:
+                        total_bid_volume += getattr(tick, f"bid_volume_{num_level}")
+                # max_bid_price = getattr(tick, f"bid_price_{self.bid_order_level}") if self.bid_order_level > 0 else market_price
+                # vt_bid_price = round_to(max_bid_price - self.pricetick, self.pricetick)
+                vt_bid_price = getattr(tick, f"bid_price_1")
+                if self.vt_bid_price > vt_bid_price:
+                    cancel_bid = True
+                    self.write_log(f"当前买单{self.vt_bid_price} 高于最新买{self.bid_order_level}价 {vt_bid_price}，取消")
+                elif self.vt_bid_price < vt_bid_price:
+                    cancel_bid = True
+                    self.write_log(f"当前买单{self.vt_bid_price} 低于最新买{self.bid_order_level}价 {vt_bid_price}，取消")
+                elif abs(self.total_bid_volume - total_bid_volume) > (self.total_bid_volume / 2):
+                    cancel_bid = True
+                    self.write_log(f"---> 当前买单{self.vt_bid_price} 取消，因为之前的订单量发生了变化")
             if cancel_bid:
                 self.cancel_order(self.vt_bid_orderid)
+                # self.bid_order_alive_tick = 0
 
     def on_timer(self):
         """"""
@@ -203,6 +218,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             self.put_variables_event()
             return
         self.timer_count = 0
+        self.write_log(f"当前余额 {self.current_balance}, 持仓 {self.pos}")
 
         if not self._update_current_balance():
             self.write_log(f"查询余额失败，上次余额: [{self.current_balance}]")
@@ -215,7 +231,7 @@ class LiquidMiningAlgo(AlgoTemplate):
             self.ask_order_level = 0
             for num_level in range(self.min_order_level, 0, -1):
                 ask_price = getattr(self.last_tick, f"ask_price_{num_level}")
-                if 0 < ask_price < market_price * (1 + self.reward_ratio * 0.99):
+                if 0 < ask_price < market_price * (1 + self.reward_ratio * 0.9):
                     self.ask_order_level = num_level
                     break
             if self.ask_order_level > 0:
@@ -250,6 +266,7 @@ class LiquidMiningAlgo(AlgoTemplate):
                         self.last_ask_volume = round_to(volume - self.volumetick, self.volumetick)
                         self.write_log(f"流动性挖矿卖出价格: {vt_ask_price}, 量: {self.last_ask_volume}")
                         self.vt_ask_orderid = self.sell(self.vt_symbol, vt_ask_price, self.last_ask_volume)
+                        self.ask_order_alive_tick = 0
                     elif ask_condition8 and one_ask_volume < self.auto_trade_volume:
                         self.write_log(f"---> 流动性挖矿买入低价one_ask_price: {one_ask_price}, one_ask_volume: {one_ask_volume}")
                         self.buy(self.vt_symbol, one_ask_price, one_ask_volume)
@@ -297,6 +314,7 @@ class LiquidMiningAlgo(AlgoTemplate):
                         self.last_bid_volume = round_to(volume - self.volumetick, self.volumetick)
                         self.write_log(f"流动性挖矿买入价格: {vt_bid_price}, 量: {self.last_bid_volume}")
                         self.vt_bid_orderid = self.buy(self.vt_symbol, vt_bid_price, self.last_bid_volume)
+                        self.bid_order_alive_tick = 0
                     elif bid_condition8 and one_bid_volume < self.auto_trade_volume:
                         self.write_log(f"---> 流动性挖矿卖出高价one_bid_price: {one_bid_price}, one_bid_volume: {one_bid_volume}")
                         self.sell(self.vt_symbol, one_bid_price, one_bid_volume)
@@ -320,9 +338,11 @@ class LiquidMiningAlgo(AlgoTemplate):
 
     def on_trade(self, trade: TradeData):
         """"""
-        if trade.tradeid == self.vt_ask_orderid:
+        if trade.direction == Direction.SHORT:
+            self.write_log(f"流动性挖矿卖单{trade.vt_orderid}成交，价:{trade.price}, 量:{trade.volume}")
             self.pos -= trade.volume
-        elif trade.tradeid == self.vt_bid_orderid:
+        elif trade.direction == Direction.LONG:
+            self.write_log(f"流动性挖矿买单{trade.vt_orderid}成交，价:{trade.price}, 量:{trade.volume}")
             self.pos += trade.volume
 
         self.put_variables_event()

@@ -1,22 +1,20 @@
 """
-Gateway for Loopring Crypto Exchange.
+Gateway for Loopring v36 Crypto Exchange.
 """
 
-from copy import copy
-from datetime import datetime, timedelta
-from enum import Enum
+import urllib
 import hashlib
 import hmac
+import time
+import ujson
+from copy import copy
+from datetime import datetime, timedelta
+from enum import Flag
+from threading import Lock
 from operator import itemgetter
 from random import randint
-import re
-import sys
-import time
-from threading import Lock
-from time import sleep
 from typing import Any, Sequence
-import ujson
-import urllib
+import re
 
 from vnpy.api.rest import RestClient, Request
 from vnpy.api.websocket import WebsocketClient
@@ -42,24 +40,29 @@ from vnpy.trader.object import (
     HistoryRequest
 )
 from vnpy.trader.event import EVENT_TIMER
+from vnpy.trader.setting import SETTINGS
 from vnpy.event import Event
+from vnpy.gateway.loopringv36.loopring_orderId_manager import BaseOrderIdManager
+from vnpy.gateway.loopringv36.eddsa_utils import *
 
-from .ethsnarks.eddsa import PureEdDSA
-from .ethsnarks.eddsa import PoseidonEdDSA
-from .ethsnarks.field import FQ, SNARK_SCALAR_FIELD
-from .ethsnarks.poseidon import poseidon_params, poseidon
-from .loopring_orderId_manager import BaseOrderIdManager
+from vnpy.gateway.loopring.ethsnarks.eddsa import PoseidonEdDSA
+from vnpy.gateway.loopring.ethsnarks.field import FQ, SNARK_SCALAR_FIELD
+from vnpy.gateway.loopring.ethsnarks.poseidon import poseidon_params, poseidon
+import sys
+from time import sleep
+from pathlib import Path
 
-
-REST_HOST = "https://api.loopring.io"
-WEBSOCKET_TRADE_HOST = "wss://ws.loopring.io/v2/ws"
-WEBSOCKET_DATA_HOST =  "wss://ws.loopring.io/v2/ws"
+REST_HOST = "https://api3.loopring.io"
+WEBSOCKET_TRADE_HOST = "wss://ws.api3.loopring.io/v3/ws"
+WEBSOCKET_DATA_HOST =  "wss://ws.api3.loopring.io/v3/ws"
 
 STATUS_LOOPRING2VT = {
     "processing": Status.NOTTRADED,
     "filled"    : Status.PARTTRADED,
     "processed" : Status.ALLTRADED,
-    "cancelled" : Status.CANCELLED
+    "cancelling": Status.CANCELLING,
+    "cancelled" : Status.CANCELLED,
+    "expired"   : Status.EXPIRED
 }
 
 ORDERTYPE_VT2LOOPRING = {
@@ -87,15 +90,15 @@ TIMEDELTA_MAP = {
 }
 
 
-class Security(Enum):
+class Security(Flag):
     NONE = 0
     SIGNED = 1
     API_KEY = 2
-
+    ECDSA_SIGN = 4
 
 symbol_name_map = {}
 
-class LoopringGateway(BaseGateway):
+class LoopringV36Gateway(BaseGateway):
     """
     VN Trader Gateway for Loopring connection.
     """
@@ -109,42 +112,36 @@ class LoopringGateway(BaseGateway):
         "address": "",
     }
 
-    exchanges = [Exchange.LOOPRING]
+    exchanges = [Exchange.LOOPRINGV36]
 
-    MAX_ORDER_ID = 1_000_000
+    MAX_ORDER_ID = 0xFFFFFFFF
 
     def __init__(self, event_engine):
         """Constructor"""
-        super().__init__(event_engine, "LOOPRING")
+        super().__init__(event_engine, "LOOPRINGV36")
 
         self.subscribe_reqs = {}
-
-        self.orders = {}
 
         # Max subcribe ws can be up to 3 for triangle algo
         self.trade_ws_apis = [LoopringTradeWebsocketApi(self)]
         self.market_ws_apis = [LoopringDataWebsocketApi(self)]
         self.rest_api = LoopringRestApi(self)
 
+        # order records
+        self.orders = {}
+
         # self.event_engine.register(EVENT_TIMER, self.process_timer_event)
 
     def connect(self, setting: dict):
         """"""
-        key = setting["apiKey"]
-        secret = setting["privateKey"]
-        session_number = setting.get("session_number", 3)
         proxy_host = setting.get("proxy_host", "")
         proxy_port = setting.get("proxy_port", "")
-        address = setting["accountAddress"]
-        accountId = setting["accountId"]
-        exchangeId = setting.get("exchangeId", 1)
 
-        self.rest_api.connect(exchangeId, key, secret, session_number,
-                              proxy_host, proxy_port, address, accountId)
+        self.rest_api.connect(setting)
         for market_ws_api in self.market_ws_apis:
             market_ws_api.connect(proxy_host, proxy_port)
         for trace_ws_api in self.trade_ws_apis:
-            trace_ws_api.connect(proxy_host, proxy_port)
+            trace_ws_api.connect(WEBSOCKET_DATA_HOST, proxy_host, proxy_port)
 
     def subscribe(self, req: SubscribeRequest):
         """"""
@@ -157,23 +154,32 @@ class LoopringGateway(BaseGateway):
         for t in tokens:
             assert t in self.rest_api.tokens
             tokenId = self.rest_api.tokens[t].tokenId
-            self.rest_api.query_orderId(tokenId)
+            self.rest_api.get_storageId(tokenId)
 
         self.trade_ws_apis[0].subscribe(req)
         self.market_ws_apis[0].subscribe(req)
         self.subscribe_reqs[req.symbol] = req
 
-    def query_ws_key(self):
-        return self.rest_api.query_ws_key()
-
     def send_order(self, req: OrderRequest):
         """"""
         return self.rest_api.send_order(req)
 
+    def send_orders(self, reqs: Sequence[OrderRequest]):
+        """"""
+        return self.rest_api.send_orders(reqs)
+
     def cancel_order(self, req: CancelRequest):
         """"""
-        if req.orderid in self.orders:
+        if req.orderid in self.orders or req.orderid == "*":
             self.rest_api.cancel_order(req)
+
+    def cancel_orders(self, reqs: Sequence[CancelRequest]):
+        """"""
+        self.rest_api.cancel_orders(reqs)
+
+    def query_ws_key(self):
+        """"""
+        return self.rest_api.query_ws_key()
 
     def query_account(self):
         """"""
@@ -199,6 +205,10 @@ class LoopringGateway(BaseGateway):
         """"""
         if order.is_active():
             self.orders[order.orderid] = order
+        elif order.status in [Status.CANCEL_REJECT, Status.CANCELLING]:
+            # this mean the order is still active in srv, and will
+            # be cancelled soon, so we keep order for a while.
+            pass
         else:
             self.orders.pop(order.orderid, None)
         super().on_order(order)
@@ -207,13 +217,16 @@ class LoopringGateway(BaseGateway):
         """"""
         #TODO: handle timeout
 
+    def reset_loopring_connection(self):
+        return self.rest_api.reset_loopring_connection()
 
+# class LoopringRestApi(AsyncRestClient):
 class LoopringRestApi(RestClient):
     """
     LOOPRING REST API
     """
 
-    def __init__(self, gateway: LoopringGateway):
+    def __init__(self, gateway: LoopringV36Gateway):
         """"""
         super().__init__()
 
@@ -247,6 +260,7 @@ class LoopringRestApi(RestClient):
         self.tokens = {}
 
         self.orderId_manager = BaseOrderIdManager()
+        self.offchainId_manager = BaseOrderIdManager()
 
 
     def _order_params(self, request):
@@ -269,11 +283,12 @@ class LoopringRestApi(RestClient):
                 request.params = {}
             return request
 
+        path = request.path
         if request.params:
-            path = request.path + "?" + urllib.parse.urlencode(request.params, safe=',')
+            if request.method in ["GET", "DELETE"]:
+                path = request.path + "?" + urllib.parse.urlencode(request.params, safe=',')
         else:
             request.params = dict()
-            path = request.path
 
         # Add headers
         default_headers = {
@@ -285,15 +300,22 @@ class LoopringRestApi(RestClient):
         if request.headers != None:
             default_headers.update(request.headers)
 
-        if security == Security.SIGNED:
+        if security & Security.SIGNED:
             ordered_data = self._order_params(request)
             hasher = hashlib.sha256()
-            msgBuf = ordered_data.encode('utf-8')
-            hasher.update(msgBuf)
+            hasher.update(ordered_data.encode('utf-8'))
             msgHash = int(hasher.hexdigest(), 16) % SNARK_SCALAR_FIELD
-            signed = PoseidonEdDSA.sign(msgHash, FQ(int(self.secret)))
-            signature = ','.join(str(_) for _ in [signed.sig.R.x, signed.sig.R.y, signed.sig.s])
+            # print("order_data =", ordered_data, "hash =", hex(msgHash))
+            signed = PoseidonEdDSA.sign(msgHash, FQ(int(self.eddsaKey, 16)))
+            signature = "0x" + "".join([
+                                            hex(int(signed.sig.R.x))[2:].zfill(64),
+                                            hex(int(signed.sig.R.y))[2:].zfill(64),
+                                            hex(int(signed.sig.s))[2:].zfill(64)
+                                        ])
             default_headers.update({"X-API-SIG": signature})
+        elif security & Security.ECDSA_SIGN:
+            default_headers.update({"X-API-SIG": request.data["ecdsaSig"]})
+            pass
 
         request.path = path
         if request.method != "GET":
@@ -302,37 +324,40 @@ class LoopringRestApi(RestClient):
         else:
             request.data = ujson.dumps({})
 
-        if security in [Security.SIGNED, Security.API_KEY]:
-            request.headers = default_headers
+        # if security in [Security.SIGNED, Security.API_KEY]:
+        request.headers = default_headers
 
+        # self.gateway.write_log(f"finish sign {request.path}")
         return request
 
     def connect(
             self,
-            exchangeId: int,
-            key: str,
-            secret: str,
-            session_number: int,
-            proxy_host: str,
-            proxy_port: int,
-            address: str,
-            accountId: int,
+            exported_secret: dict
     ):
         """
-        Initialize connection to REST server.
+        Initialize connection to LOOPRING REST server.
         """
-        self.key = key
-        self.exchangeId = exchangeId
-        self.secret = secret.encode()
-        self.proxy_port = proxy_port
-        self.proxy_host = proxy_host
-        self.address = address
-        self.accountId = accountId
+        self.api_key    = exported_secret['apiKey']
+        self.eddsaKey   = exported_secret['eddsaKey']
+        # self.ecdsaKey   = int(exported_secret['ecdsaKey'], 16).to_bytes(32, byteorder='big')
+        self.address    = exported_secret['accountAddress']
+        self.accountId  = exported_secret['accountId']
+        self.publicKeyX = exported_secret["publicKeyX"]
+        self.publicKeyY = exported_secret["publicKeyY"]
+        self.exchange   = exported_secret['exchangeAddress']
+
+        self.next_eddsaKey = None
+
+        self.ammJoinfeeBips = 0.001
+        self.ammPools = {}
 
         self.connect_time = (
-                int(datetime.now().strftime("%y%m%d%H%M%S")) * self.orderId_limit
+            int(datetime.now().strftime("%y%m%d%H%M%S")) * self.orderId_limit
         )
 
+        proxy_host = exported_secret.get('proxy_host', "")
+        proxy_port = exported_secret.get('proxy_port', "")
+        session_number = exported_secret.get('session_number', 3)
         self.init(REST_HOST, proxy_host, proxy_port)
         self.start(session_number)
 
@@ -344,22 +369,21 @@ class LoopringRestApi(RestClient):
         self.query_market_config()
         self.gateway.write_log("start query_account")
         self.query_account()
-        self.gateway.write_log("trade_ws_apis connect")
+        self.gateway.write_log("query_account connect")
 
     def query_ws_key(self):
+        # TODO
         data = {
             "security": Security.NONE
         }
 
         response = self.request(
             "GET",
-            path="/v2/ws/key",
+            path="/v3/ws/key",
             data=data
         )
         json_resp = response.json()
-        if json_resp['resultInfo']['code'] != 0:
-            raise AttributeError(f"query_ws_key failed {data}")
-        return json_resp['data']
+        return json_resp['key']
 
     def query_time(self):
         """"""
@@ -369,26 +393,25 @@ class LoopringRestApi(RestClient):
 
         added_request = self.add_request(
             "GET",
-            path="/api/v2/timestamp",
+            path="/api/v3/timestamp",
             callback=self.on_query_time,
             data=data
         )
-        return added_request
 
     def query_account(self):
         """"""
         data = {
             "security": Security.NONE
         }
-        params = {
+        param = {
             "owner": self.address
         }
 
         self.add_request(
             method="GET",
-            path="/api/v2/account",
+            path="/api/v3/account",
             callback=self.on_query_account,
-            params=params,
+            params=param,
             data=data
         )
 
@@ -396,17 +419,15 @@ class LoopringRestApi(RestClient):
         """"""
         data = {"security": Security.SIGNED}
 
-        params = {
+        param = {
             "accountId": self.accountId,
-            "publicKeyX": self.publicKeyX,
-            "publicKeyY": self.publicKeyY
         }
 
         self.add_request(
             method="GET",
-            path="/api/v2/apiKey",
+            path="/api/v3/apiKey",
             callback=self.on_query_apikey,
-            params=params,
+            params=param,
             data=data
         )
 
@@ -414,16 +435,16 @@ class LoopringRestApi(RestClient):
         """"""
         data = {"security": Security.API_KEY}
 
-        params = {
+        param = {
             "accountId": self.accountId,
             "tokens": ','.join([str(token.tokenId) for token in self.tokens.values()])
         }
 
         self.add_request(
             method="GET",
-            path="/api/v2/user/balances",
+            path="/api/v3/user/balances",
             callback=self.on_query_balance,
-            params=params,
+            params=param,
             data=data
         )
 
@@ -431,7 +452,7 @@ class LoopringRestApi(RestClient):
         """"""
         raise NotImplementedError("Using query_orders")
 
-    def query_orders(self):
+    def query_orders(self, offset = 0):
         """"""
         data = {"security": Security.API_KEY}
 
@@ -440,15 +461,17 @@ class LoopringRestApi(RestClient):
             "start" : 0,
             "end" : (int(time.time()) - self.time_offset) * 1000,
             "status": "processing",
-            "limit" : 50
+            "limit" : 50,
+            "offset": offset
         }
 
         self.add_request(
             method="GET",
-            path="/api/v2/orders",
+            path="/api/v3/orders",
             callback=self.on_query_orders,
             params=params,
-            data=data
+            data=data,
+            extra=offset
         )
 
     def query_market_config(self):
@@ -461,7 +484,7 @@ class LoopringRestApi(RestClient):
 
         self.add_request(
             method="GET",
-            path="/api/v2/exchange/tokens",
+            path="/api/v3/exchange/tokens",
             callback=self.on_query_token,
             params=params,
             data=data
@@ -477,12 +500,11 @@ class LoopringRestApi(RestClient):
 
         self.add_request(
             method="GET",
-            path="/api/v2/exchange/markets",
+            path="/api/v3/exchange/markets",
             callback=self.on_query_contract,
             params=params,
             data=data
         )
-
 
     def _new_order_id(self):
         """"""
@@ -511,7 +533,7 @@ class LoopringRestApi(RestClient):
             tokenSId, tokenBId = tokenBId, tokenSId
             amountS, amountB = amountB, amountS
 
-        clientOrderId = str(self.connect_time + self._new_order_id())
+        clientOrderId = str(self.connect_time) + "-"+ str(self._new_order_id())
         vt_order = req.create_order_data(
             orderid=clientOrderId,
             gateway_name=self.gateway_name
@@ -527,49 +549,41 @@ class LoopringRestApi(RestClient):
 
         # ahead 1 hour
         validSince = int(time.time()) - self.time_offset - 3600
-        validUntil = validSince + 60 * 24 * 60 * 60
+        validUntil = 1700000000 #validSince + 60 * 24 * 60 * 60
         maxFeeBips = 50
-        allOrNone = 0
 
-        label = 596
-        msg_parts = [
-            int(self.exchangeId),
-            int(orderId),
-            int(self.accountId),
-            int(tokenSId),
-            int(tokenBId),
-            int(amountS),
-            int(amountB),
-            int(allOrNone),
-            int(validSince),
-            int(validUntil),
-            int(maxFeeBips),
-            int(buy),
-            int(label)
-        ]
-        PoseidonHashParams = poseidon_params(SNARK_SCALAR_FIELD, 14, 6, 53, b'poseidon', 5, security_target=128)
-        msgHash = poseidon(msg_parts, PoseidonHashParams)
-        signedMessage = PoseidonEdDSA.sign(msgHash, FQ(int(self.secret)))
+        # order base
         newOrder = {
-            "exchangeId": self.exchangeId,
-            "orderId": orderId,
-            "accountId": self.accountId,
-            "tokenSId": tokenSId,
-            "tokenBId": tokenBId,
-            "amountS": amountS,
-            "amountB": amountB,
-            "allOrNone": "false",
-            "buy": "true" if buy else "false",
-            "validSince": validSince,
-            "validUntil": validUntil,
-            "maxFeeBips": maxFeeBips,
-            "label": label,
-            "hash": str(msgHash),
-            "signatureRx": str(signedMessage.sig.R.x),
-            "signatureRy": str(signedMessage.sig.R.y),
-            "signatureS": str(signedMessage.sig.s),
-            "clientOrderId": clientOrderId
+            # sign part
+            "exchange"      : self.exchange,
+            "accountId"     : self.accountId,
+            "storageId"     : orderId,
+            "sellToken": {
+                "tokenId": tokenSId,
+                "volume": amountS
+            },
+            "buyToken" : {
+                "tokenId": tokenBId,
+                "volume": amountB
+            },
+            "validUntil"    : validUntil,
+            "maxFeeBips"    : maxFeeBips,
+            "fillAmountBOrS": buy,
+            # "taker"         : "0000000000000000000000000000000000000000",
+            # aux data
+            "allOrNone"     : False,
+            "clientOrderId" : clientOrderId,
+            "orderType"     : "LIMIT_ORDER"
         }
+
+        signer = OrderEddsaSignHelper(self.eddsaKey)
+        msgHash = signer.hash(newOrder)
+        signedMessage = signer.sign(newOrder)
+        # update signaure
+        newOrder.update({
+            "hash"           : hex(msgHash),
+            "eddsaSignature" : signedMessage
+        })
 
         # self.gateway.write_log(f"create new order {newOrder}")
         return True, vt_order, newOrder
@@ -591,7 +605,7 @@ class LoopringRestApi(RestClient):
 
         self.add_request(
             method="POST",
-            path="/api/v2/order",
+            path="/api/v3/order",
             callback=self.on_send_order,
             params=newOrder,
             data=data,
@@ -612,65 +626,60 @@ class LoopringRestApi(RestClient):
 
         params = {
             "accountId": self.accountId,
+            # "orderHash": self.clientOrderMap[req.orderid]
+            # 'clientOrderId': req.orderid
         }
 
         if req.orderid != "*":
-            params ['clientOrderId'] = req.orderid
+            params['clientOrderId'] = req.orderid
 
         self.add_request(
             method="DELETE",
-            path="/api/v2/orders",
+            path="/api/v3/order",
             callback=self.on_cancel_order,
             params=params,
             data=data,
+            on_failed=self.on_cancel_order_failed,
+            on_error=self.on_cancel_order_error,
         )
 
     def on_query_time(self, data, request):
         """"""
-        if data['resultInfo']['code'] != 0:
-            raise AttributeError(f"on_query_time failed {data}")
+        self.gateway.write_log(f"on_query_time: {data}")
         local_time = int(time.time() * 1000)
-        server_time = int(data["data"])
+        server_time = int(data["timestamp"])
         self.time_offset = int((local_time - server_time) / 1000)
 
     def on_query_account(self, data, request):
         """"""
         self.gateway.write_log(f"on_query_account {data}")
-        if data['resultInfo']['code'] != 0:
-            raise AttributeError(f"on_query_account failed {data}")
-
-        account_data = data['data']
-        self.accountId = account_data['accountId']
-        self.publicKeyX = account_data['publicKeyX']
-        self.publicKeyY = account_data['publicKeyY']
+        self.accountId  = data['accountId']
+        self.publicKeyX = data['publicKey']['x']
+        self.publicKeyY = data['publicKey']['y']
+        # self.key = account_data['apiKey']
 
         self.gateway.write_log("账户信息查询成功")
+
+        self.gateway.write_log("start get_apiKey")
         self.query_apikey()
 
     def on_query_apikey(self, data, request):
         self.gateway.write_log(f"on_query_apikey {data}")
-        if data['resultInfo']['code'] != 0:
-            raise AttributeError(f"on_query_account failed {data}")
+        self.key = data["apiKey"]
 
-        self.key = data["data"]
-
-        self.gateway.write_log("查询账户余额")
+        self.gateway.write_log("start query_balance")
         self.query_balance()
 
-        self.gateway.write_log("查询账户订单")
+        self.gateway.write_log("start query_orders")
         self.query_orders()
 
     def on_query_balance(self, data, request):
-        # self.gateway.write_log(f"on_query_balance {data}")
-        if data['resultInfo']['code'] != 0:
-            raise AttributeError(f"on_query_balance failed {data}")
-
-        for balance in data['data']:
-            accountId = balance['accountId']
+        self.gateway.write_log(f"on_query_balance {data}")
+        for balance in data:
             token_symbol = "LRC"
             decimals = 18
-            tokenAmount = balance['totalAmount']
-            frozenAmount = balance['amountLocked']
+            tokenAmount = balance['total']
+            frozenAmount = balance['locked']
             for token in self.tokens.keys():
                 if self.tokens[token].tokenId == balance['tokenId']:
                     token_symbol = self.tokens[token].symbol
@@ -686,64 +695,71 @@ class LoopringRestApi(RestClient):
 
         self.gateway.write_log("账户余额查询成功")
 
-    def on_query_orderId(self, data, request):
-        # self.gateway.write_log(f"on_query_orderId {request} {data}")
-        if data['resultInfo']['code'] != 0:
-            raise AttributeError(f"on_query_orderId failed {data}")
+    def on_get_storageId(self, data, request):
+        # self.gateway.write_log(f"on_get_storageId {request} {data}")
 
-        tokenId = request.params['tokenSId']
-        self.orderId_manager.put_orderId(tokenId, int(data['data']))
-        self.gateway.write_log("账户token{tokenId} orderId查询成功")
+        tokenId = request.params['sellTokenId']
+        self.orderId_manager.put_orderId(tokenId, int(data['orderId']))
+        self.offchainId_manager.put_orderId(tokenId, int(data['offchainId']))
 
     def on_query_orders(self, data, request):
         # self.gateway.write_log(f"on_query_orders {data}")
-        orders = []
-        for order in data['data']['orders']:
+
+        for order in data['orders']:
             # TODO: use correct decimals to calc volume
             decimals = self.contracts[order['market']].decimals
-            volume = int(order["size"])/(10**decimals)
+            volume = int(order["volumes"]["baseAmount"])/(10**decimals)
+            traded = int(order["volumes"]["baseFilled"])/(10**decimals)
             order_data = OrderData(
                 orderid=order["clientOrderId"],
                 symbol=order["market"],
-                exchange=Exchange.LOOPRING,
+                exchange=Exchange.LOOPRINGV36,
                 price=float(order["price"]),
                 volume=volume,
+                traded=traded,
                 type=OrderType.LIMIT,
                 direction=DIRECTION_LOOPRING2VT[order["side"]],
                 status=STATUS_LOOPRING2VT.get(order["status"], None),
-                datetime=datetime.fromtimestamp(float(order['createdAt']) / 1000).__str__(),
+                datetime=datetime.fromtimestamp(float(order['validity']['start'])).__str__(),
                 gateway_name=self.gateway_name,
             )
-            orders.append(order_data)
             self.gateway.on_order(order_data)
-        self.gateway.write_log(f"所有Orders查询成功:\n{orders}")
+
+        if request.extra + len(data['orders']) < data['totalNum']:
+            self.query_orders(request.extra + len(data['orders']))
+        else:
+            self.gateway.write_log("所有Orders查询成功")
 
     def on_query_token(self, data, request):
         """"""
-        for d in data["data"]:
+        self.gateway.write_log(f"on_query_token: {data}")
+        for d in data:
             contract = ContractData(
                 symbol=d["symbol"],
                 name=d["symbol"],
-                exchange=Exchange.LOOPRING,
+                exchange=Exchange.LOOPRINGV36,
                 size=1,
                 address=d['address'],
                 decimals=d['decimals'],
                 tokenId=d['tokenId'],
                 product=Product.SPOT,
                 pricetick=0.0,
-                min_volume=int(d['minOrderAmount'])/10**int(d['decimals']),
+                min_volume=int(d['orderAmounts']['minimum'])/10**int(d['decimals']),
                 history_data=True,
                 gateway_name=self.gateway_name,
             )
             self.gateway.on_contract(contract)
             self.tokens[d['symbol']] = contract
+            # self.get_storageId(d['tokenId'])
+        self.gateway.write_log(f"on_query_token success: {self.tokens}")
         self.gateway.write_log("start query_contract")
         self.query_contract()
+        # self.query_amm_pools()
 
     def on_query_contract(self, data, requet):
-        # self.gateway.write_log(f"on_query_contract: {data}")
+        self.gateway.write_log(f"on_query_contract: {data}")
         decimals = 18
-        for d in data["data"]:
+        for d in data["markets"]:
             tokens = re.match("(\w+)-(\w+)", d['market'])
             assert tokens is not None
             base_token = tokens.groups()[0]
@@ -753,40 +769,26 @@ class LoopringRestApi(RestClient):
             contract = ContractData(
                 symbol=d["market"],
                 name=d["market"],
-                exchange=Exchange.LOOPRING,
+                exchange=Exchange.LOOPRINGV36,
                 size=1,
+                # address=d['address'],
                 decimals=decimals,
+                # tokenId=d['baseTokenId'],
                 min_volume=0.0001,
                 product=Product.SPOT,
-                pricetick=1/10**d['precisionForPrice'],
+                pricetick=float(1)/(10**d['precisionForPrice']),
                 history_data=True,
                 gateway_name=self.gateway_name,
             )
             self.gateway.on_contract(contract)
             self.contracts[d['market']] = contract
+
             symbol_name_map[contract.symbol] = contract.name
+
         self.gateway.write_log(f"Contract 信息查询成功 {symbol_name_map}")
 
     def on_send_order(self, data, request):
-        if data['resultInfo']['code'] != 0:
-            self.gateway.write_log(f"下单 {request.extra[0]} 失败, 原因:{data['resultInfo']['message']}.")
-            order = request.extra[0]
-            order.status = Status.REJECTED
-            # {'error': {'code': 102007, 'message': 'order existed, please check detail order info'}}
-            if 'order existed' in data['resultInfo']['message']:
-                self.gateway.on_order(order)
-                return
-
-            newest_order_id = 0
-            # if {'error': {'code': 102004, 'message': 'the newest order id should be 57451'}}
-            if 'the newest order id should be' in data['resultInfo']['message']:
-                newest_order_id = re.search('the newest order id should be (\d+)', data['resultInfo']['message']).groups()[0]
-
-            self.on_error_recover_orderId(request, int(newest_order_id))
-            self.gateway.on_order(order)
-            return
-
-        self.gateway.write_log(f"下单 {request.extra[0]} 成功, hash = {data['data']}.")
+        # self.gateway.write_log(f"on_send_order {data} success")
         order = request.extra[0]
         order.status = Status.NOTTRADED
         self.gateway.on_order(order)
@@ -797,12 +799,23 @@ class LoopringRestApi(RestClient):
         """
         Callback when sending order failed on server.
         """
-        self.gateway.write_log(f"Error: on_send_order_failed: {status_code} {request}")
+        self.gateway.write_log(f"Error: on_send_order_failed: {status_code} {request.response.text}")
         orders = request.extra
+        data = request.response.json()
         for order in orders:
             order.status = Status.REJECTED
+            # {'error': {'code': 102007, 'message': 'order existed, please check detail order info'}}
+            if 'resultInfo' in data and 'order existed' in data['resultInfo']['message']:
+                self.gateway.on_order(order)
+                return
+
+            newest_order_id = 0
+            # if {'error': {'code': 102004, 'message': 'the newest storage id should be 57451'}}
+            if 'the newest storage id should be' in data['resultInfo']['message']:
+                newest_order_id = re.search('the newest storage id should be (\d+)', data['resultInfo']['message']).groups()[0]
+
             #align srv orderId
-            self.on_error_recover_orderId(request)
+            self.on_error_recover_orderId(request, newest_order_id)
             self.gateway.on_order(order)
             # delay 150ms to avoid high TPS in srv.
             sleep(0.15)
@@ -813,7 +826,7 @@ class LoopringRestApi(RestClient):
         """
         Callback when sending order caused exception.
         """
-        self.gateway.write_log(f"on_send_order_error {exception_value} {request}")
+        self.gateway.write_log(f"on_send_order_error {exception_value} {request.response.text}")
         orders = request.extra
         for order in orders:
             order.status = Status.REJECTED
@@ -831,14 +844,14 @@ class LoopringRestApi(RestClient):
     def on_error_recover_orderId(self, request, newest_order_id: int = 0):
         # self.gateway.write_log(f"on_error_recover_orderId: {request} {newest_order_id}")
         order_detail = ujson.loads(request.data)
-        orderId = order_detail.get('orderId', None)
-        tokenSId = order_detail.get('tokenSId', None)
+        orderId = order_detail.get('storageId', None)
+        tokenSId = order_detail.get("sellToken", {}).get("tokenId", None)
         if orderId is not None and tokenSId is not None:
             if newest_order_id != 0:
                 self.orderId_manager.put_orderId(tokenSId, newest_order_id)
-                self.gateway.write_log(f"on_error_recover_orderId: updated orderid of {tokenSId} to {newest_order_id}")
+                # self.gateway.write_log(f"on_error_recover_orderId: updated orderid of {tokenSId} to {newest_order_id}")
             else:
-                self.gateway.write_log(f"on_error_recover_orderId: reuse orderId {orderId}")
+                # self.gateway.write_log(f"on_error_recover_orderId: reuse orderId {orderId}")
                 reuse_tokenS_orderIds = self.failed_orderId.get(tokenSId, [])
                 reuse_tokenS_orderIds.append(orderId)
                 self.failed_orderId[tokenSId] = reuse_tokenS_orderIds
@@ -868,46 +881,88 @@ class LoopringRestApi(RestClient):
         sleep(0.15)
 
     def on_cancel_order(self, data, request):
-        if data["resultInfo"]["code"] == 0:
-            self.gateway.write_log(f"Cancel order {request.data} 成功.")
-            json_request = ujson.loads(request.data)
-            if "clientOrderId" in json_request:
-                clientOrderId = json_request['clientOrderId']
-                if clientOrderId in self.gateway.orders:
-                    order = self.gateway.orders[clientOrderId]
-                    order.status = Status.CANCELLED
-                    self.gateway.on_order(order)
-        else: # sth wrong
-            self.gateway.write_log(f"Cancel order {request.data} error {data['resultInfo']['message']}.")
-            json_request = ujson.loads(request.data)
-            if "clientOrderId" in json_request:
-                clientOrderId = json_request['clientOrderId']
-                if clientOrderId in self.gateway.orders:
-                    if "CANCELLED" in data['resultInfo']['message']:
-                        order = self.gateway.orders[clientOrderId]
+        """"""
+        self.gateway.write_log(f"Cancel order {request.data} 成功.")
+        json_request = ujson.loads(request.data)
+        if "clientOrderId" in json_request:
+            clientOrderId = json_request['clientOrderId']
+            if clientOrderId in self.gateway.orders:
+                order = self.gateway.orders[clientOrderId]
+                order.status = Status.CANCELLED
+                self.gateway.on_order(order)
+
+    def on_cancel_order_failed(self, status_code: int, request: Request):
+        msg = f"on_cancel_order_fail {request.data} 失败，状态码：{status_code}"
+        data = request.response.json()
+        self.gateway.write_log(msg)
+        cancelReq = ujson.loads(request.data)
+        if 'clientOrderId' in cancelReq:
+            for id in cancelReq['clientOrderId'].split(','):
+                order = self.gateway.orders.get(id, None)
+                if not order:
+                    # self.gateway.write_log(f"Cancel Order, {id} not found in self order records")
+                    pass
+                else:
+                    if "resultInfo" in data and "CANCELLED" in data['resultInfo']['message']:
+                        order = self.gateway.orders[id]
                         order.status = Status.CANCELLED
                         self.gateway.on_order(order)
                     elif "COMPLETELY_FILLED" in data['resultInfo']['message']:
-                        order = self.gateway.orders[clientOrderId]
+                        order = self.gateway.orders[id]
                         order.status = Status.ALLTRADED
                         self.gateway.on_order(order)
+                    else:
+                        order.status = Status.CANCEL_REJECT
+                        # tell engine this is a error
+                        self.gateway.on_order(order)
+        # delay 150ms to avoid high TPS in srv.
+        sleep(0.5)
         pass
 
-    def query_orderId(self, tokenId):
+    def on_cancel_order_error(
+            self, exception_type: type, exception_value: Exception, tb, request: Request
+    ):
+        """
+        Callback when sending order caused exception.
+        """
+        self.gateway.write_log(f"on_cancel_order_error {exception_value} {request}")
+        cancelReq = ujson.loads(request.data)
+        if 'clientOrderId' in cancelReq:
+            for id in cancelReq['clientOrderId'].split(','):
+                order = self.gateway.orders.get(id, None)
+                if not order:
+                    self.gateway.write_log(f"Cancel Order, {id} not found in self order records")
+                else:
+                    order.status = Status.CANCEL_REJECT
+                    # tell engine this is a error
+                    self.gateway.on_order(order)
+
+        # Record exception if not ConnectionError
+        if not issubclass(exception_type, ConnectionError):
+            self.on_error(exception_type, exception_value, tb, request)
+        else:
+            # delay 150ms to avoid high TPS in srv.
+            sleep(0.5)
+
+    def on_keep_user_stream(self, data, request):
+        """"""
+        pass
+
+    def get_storageId(self, tokenSId):
         """"""
         data = {
             "security": Security.API_KEY
         }
-        params = {
-            "accountId": self.accountId,
-            "tokenSId": tokenId
-        }
+
         self.add_request(
-            method="GET",
-            path="/api/v2/orderId",
-            callback=self.on_query_orderId,
-            params=params,
-            data=data
+            "GET",
+            path="/api/v3/storageId",
+            callback=self.on_get_storageId,
+            data=data,
+            params = {
+                "accountId": self.accountId,
+                "sellTokenId" : tokenSId
+            }
         )
 
     def query_history(self, req: HistoryRequest):
@@ -933,7 +988,7 @@ class LoopringRestApi(RestClient):
             # Get response from server
             resp = self.request(
                 "GET",
-                "/api/v2/candlestick",
+                "/api/v3/candlestick",
                 data={"security": Security.NONE},
                 params=params
             )
@@ -987,6 +1042,18 @@ class LoopringRestApi(RestClient):
 
         return history
 
+    def reset_loopring_connection(self):
+        repeat_try = 0
+        while True:
+            try:
+                repeat_try += 1
+                wsApiKey = self.gateway.query_ws_key()
+                return WEBSOCKET_TRADE_HOST + "?" + urllib.parse.urlencode({"wsApiKey": wsApiKey}, safe=',')
+            except:
+                if repeat_try % 10 == 0:
+                    self.gateway.write_log(f"try query_ws_key {repeat_try} times.")
+                sleep(5)
+
 # Tracking own trades
 class LoopringTradeWebsocketApi(WebsocketClient):
     """"""
@@ -999,35 +1066,34 @@ class LoopringTradeWebsocketApi(WebsocketClient):
         self.gateway_name = gateway.gateway_name
         self.subscribe_reqs = {}
         self.last_subscribe_reqs = {}
-        self.ping_interval = 60
+        self.ping_interval = 60*60*24*365 #hardcode 1 year, which means never send ping as we send ping in our own pace
         self.account_sub = False
-        # self.orders = {}
 
-    def connect(self, proxy_host, proxy_port):
+    def connect(self, url, proxy_host, proxy_port):
         """"""
-        url = WEBSOCKET_DATA_HOST + "?" + urllib.parse.urlencode({"wsApiKey":self.gateway.query_ws_key()}, safe=',')
+        url = self.gateway.reset_loopring_connection()
         self.init(url, proxy_host, proxy_port)
         self.start()
 
     def on_disconnected(self):
         """"""
-        self.gateway.write_log(f"交易Websocket API连接断开")
+        self.gateway.write_log(f"交易Websocket API连接断开: subscribed reqs = {self.subscribe_reqs}")
         self.last_subscribe_reqs.update(self.subscribe_reqs)
         self.subscribe_reqs.clear()
         self.account_sub = False
-        self.host = WEBSOCKET_TRADE_HOST + "?" + urllib.parse.urlencode({"wsApiKey":self.gateway.query_ws_key()}, safe=',')
-        sleep(2) # sleep 2s to avoid srv refuse connection
+        sleep(5) # sleep 2s to avoid srv refuse connection
+        self.host = self.gateway.reset_loopring_connection()
 
     def on_connected(self):
         """"""
-        self.gateway.write_log(f"交易Websocket API连接成功")
+        self.gateway.write_log(f"交易Websocket API连接成功: subscribed reqs = {self.last_subscribe_reqs}")
         # self.gateway.rest_api.query_orders()
         for req in self.last_subscribe_reqs.values():
             self.subscribe(req)
 
     def subscribe(self, req: SubscribeRequest):
         # subscribe
-        self.gateway.write_log(f"交易Websocket API 订阅{req}.")
+        self.gateway.write_log(f"交易Websocket API连接 subscribe {req} after {self.subscribe_reqs}")
         channels = {
             "op": "sub",
             "sequence": 10000,
@@ -1057,26 +1123,27 @@ class LoopringTradeWebsocketApi(WebsocketClient):
         self.subscribe_reqs[req.symbol] = req
         self.send_packet(channels)
 
-    def on_packet(self, packet: dict):  # type: (dict)->None
-        """"""
+    def on_packet(self, packet):  # type: (dict)->None
         # self.gateway.write_log(f"交易on_packet {packet}")
-        if packet == "ping":
+        """"""
+        if "ping" in packet:
             self._send_text("pong")
             return
 
-        if 'result' in packet:
-            result = packet['result']
+        jsonData = packet #ujson.loads(ujson.dumps(eval(str(packet))))
+        if 'result' in jsonData:
+            result = jsonData['result']
             status = result['status']
             if status != 'OK':
                 self.gateway.write_log("LoopringDEX trade WS Error status:" + status)
                 raise ConnectionError(f"{result}")
 
-        if "topic" in packet:
-            topic = packet['topic']['topic']
+        if "topic" in jsonData:
+            topic = jsonData['topic']['topic']
             if topic == "account":
-                self.on_account(packet)
+                self.on_account(jsonData)
             elif topic == "order":
-                self.on_order(packet)
+                self.on_order(jsonData)
 
     def on_account(self, packet):
         # self.gateway.write_log(f"交易on_account {packet}")
@@ -1092,52 +1159,38 @@ class LoopringTradeWebsocketApi(WebsocketClient):
                     frozen=float(d["amountLocked"])/(10**decimal),
                     gateway_name=self.gateway_name
                 )
-                self.gateway.on_account(account)
+
+                if account.balance:
+                    self.gateway.on_account(account)
 
     def on_order(self, packet):
-        """"""
         # self.gateway.write_log(f"交易on_order {packet}")
+        """"""
+        # dt = datetime.fromtimestamp(packet["ts"] / 1000)
+        # time = dt.strftime("%Y-%m-%d %H:%M:%S")
+
         data = packet["data"]
         market = data['market']
         orderid = data["clientOrderId"]
         decimals = self.gateway.rest_api.contracts[market].decimals
         status = data["status"]
-        if status in ["processing", "cancelling"]:
-            if "filledSize" in data and int(data['filledSize']) > 0:
-                status = "filled"
+        if status == "processing" and "filledSize" in data and int(data['filledSize']) > 0:
+            status = "filled"
 
         order = OrderData(
             symbol=market,
-            exchange=Exchange.LOOPRING,
+            exchange=Exchange.LOOPRINGV36,
             orderid=orderid,
             direction=DIRECTION_LOOPRING2VT[data["side"]],
             price=float(data["price"]),
             volume=float(data["size"])/(10**decimals),    # TODO: decimals
             traded=float(data["filledSize"])/(10**decimals),
-            status=STATUS_LOOPRING2VT.get(status, None),
+            status=STATUS_LOOPRING2VT[status],
             datetime=datetime.fromtimestamp(float(packet["ts"]) / 1000).__str__(),
             gateway_name=self.gateway_name
         )
-        previous_traded = 0
-        previous_order_status = self.gateway.orders.get(order.orderid, None)
-        if previous_order_status:
-            previous_traded = previous_order_status.traded
-        self.gateway.on_order(order)
 
-        order_traded = order.traded - previous_traded
-        if order_traded > 0:
-            trade = TradeData(
-                symbol=market,
-                exchange=Exchange.LOOPRING,
-                orderid=order.orderid,
-                tradeid=order.orderid,
-                direction=order.direction,
-                price=order.price,
-                volume=order_traded,
-                datetime=order.datetime,
-                gateway_name=self.gateway_name,
-            )
-            self.gateway.on_trade(trade)
+        self.gateway.on_order(order)
 
     @staticmethod
     def unpack_data(data: str):
@@ -1147,11 +1200,8 @@ class LoopringTradeWebsocketApi(WebsocketClient):
         override this method if you want to use other serialization format.
         """
         if "ping" == data:
-            return data
+            return {"ping":"pong"}
         return ujson.loads(data)
-
-    def _ping(self):
-        pass
 
 class LoopringDataWebsocketApi(WebsocketClient):
     """"""
@@ -1162,7 +1212,7 @@ class LoopringDataWebsocketApi(WebsocketClient):
 
         self.gateway = gateway
         self.gateway_name = gateway.gateway_name
-        self.ping_interval = 60
+        self.ping_interval = 60*60*24*365 #hardcode 1 year, which means never send ping as we send ping in our own pace
 
         self.ticks = {}
         self.last_tick_timestampe = 0
@@ -1176,7 +1226,7 @@ class LoopringDataWebsocketApi(WebsocketClient):
         self.proxy_host = proxy_host
         self.proxy_port = proxy_port
 
-        url = WEBSOCKET_DATA_HOST + "?" + urllib.parse.urlencode({"wsApiKey":self.gateway.query_ws_key()}, safe=',')
+        url = self.gateway.reset_loopring_connection()
         self.init(url, self.proxy_host, self.proxy_port)
         self.start()
 
@@ -1185,8 +1235,8 @@ class LoopringDataWebsocketApi(WebsocketClient):
         self.gateway.write_log(f"行情Websocket API连接断开: subscribed reqs = {self.subscribe_reqs}")
         self.last_subscribe_reqs.update(self.subscribe_reqs)
         self.subscribe_reqs.clear()
-        self.host = WEBSOCKET_TRADE_HOST + "?" + urllib.parse.urlencode({"wsApiKey":self.gateway.query_ws_key()}, safe=',')
-        sleep(2) # sleep 2s to avoid srv refuse connection
+        sleep(5) # sleep 5s to avoid srv refuse new connection
+        self.host = self.gateway.reset_loopring_connection()
 
     def on_connected(self):
         """"""
@@ -1195,7 +1245,7 @@ class LoopringDataWebsocketApi(WebsocketClient):
             self.subscribe(req)
 
     def subscribe(self, req: SubscribeRequest):
-        self.gateway.write_log(f"行情Websocket 订阅 {req}")
+        self.gateway.write_log(f"行情Websocket subscribe {req} after {self.subscribe_reqs}")
         """"""
 
         if req.symbol not in symbol_name_map:
@@ -1209,20 +1259,19 @@ class LoopringDataWebsocketApi(WebsocketClient):
         # Create tick buf data
         tick = self.ticks.get(req.symbol.upper(), TickData(symbol=req.symbol,
                                                            name=symbol_name_map.get(req.symbol, ""),
-                                                           exchange=Exchange.LOOPRING,
+                                                           exchange=Exchange.LOOPRINGV36,
                                                            datetime=datetime.now(),
                                                            gateway_name=self.gateway_name))
         self.ticks[req.symbol.upper()] = tick
         self.subscribe_reqs[req.symbol] = req
 
         subscribe_args = []
-        # orderbook
         subscribe_args.append(
             {
                 "topic"  : "orderbook",
                 "market" : req.symbol,
                 "level": 0,
-                "count": 5,
+                "count": 10,
                 "snapshot" : True,
             }
         )
@@ -1234,16 +1283,18 @@ class LoopringDataWebsocketApi(WebsocketClient):
             "unsubscribeAll": False,
             "topics": subscribe_args
         }
+
         self.send_packet(channels)
 
     def on_packet(self, packet):
         # self.gateway.write_log(f"行情on_packet {packet}")
-        if packet == "ping":
-            self.gateway.write_log("send pong to srv")
+        if "ping" in packet:
+            self.gateway.write_log("行情send_pong")
             self._send_text("pong")
             return
 
-        jsonData = ujson.loads(ujson.dumps(eval(str(packet))))
+        # jsonData = ujson.loads(ujson.dumps(eval(str(packet))))
+        jsonData = packet
         # subscribe status code
         if 'result' in jsonData:
             result = jsonData['result']
@@ -1269,29 +1320,28 @@ class LoopringDataWebsocketApi(WebsocketClient):
                 #     ]
                 # ]
                 # trade data
-                # market = topics['market']
-                # datas = jsonData['data']
-                # for data in datas:
-                #     order_direction = Direction.LONG
-                #     if data[2] == 'sell':
-                #         order_direction = Direction.SHORT
+                market = topics['market']
+                datas = jsonData['data']
+                for data in datas:
+                    order_direction = Direction.LONG
+                    if data[2] == 'sell':
+                        order_direction = Direction.SHORT
 
-                #     decimals = self.gateway.rest_api.contracts[market].decimals
-                #     trade_dt = datetime.fromtimestamp(float(data[0]) / 1000)
-                #     trade_time = trade_dt.strftime("%Y-%m-%d %H:%M:%S.%f")
-                #     trade = TradeData(
-                #         symbol=market,
-                #         exchange=Exchange.LOOPRING,
-                #         orderid=data[1],
-                #         tradeid=data[1],
-                #         direction=order_direction,
-                #         price=data[4],
-                #         volume=float(data[3])/(10**decimals),   # TODO: decimal
-                #         datetime=trade_time,
-                #         gateway_name=self.gateway_name,
-                #     )
-                #     self.gateway.on_trade(trade)
-                pass
+                    decimals = self.gateway.rest_api.contracts[market].decimals
+                    trade_dt = datetime.fromtimestamp(float(data[0]) / 1000)
+                    trade_time = trade_dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+                    trade = TradeData(
+                        symbol=market,
+                        exchange=Exchange.LOOPRINGV36,
+                        orderid=data[1],
+                        tradeid=data[1],
+                        direction=order_direction,
+                        price=data[4],
+                        volume=float(data[3])/(10**decimals),   # TODO: decimal
+                        time=trade_time,
+                        gateway_name=self.gateway_name,
+                    )
+                    self.gateway.on_trade(trade)
             elif topics['topic'] == "candlestick":
                 # {'topic': 'ticker&lrc-eth', 'ts': 1574150830158,
                 #  'data': {'count': '2', 'timestamp': '1574150830158', 'size': '37600000000000000', 'last': '0.000188',
@@ -1310,6 +1360,8 @@ class LoopringDataWebsocketApi(WebsocketClient):
                 tick.datetime = datetime.fromtimestamp(float(jsonData['ts']) / 1000)
                 # if tick.bid_volume_1 > 0 or tick.ask_volume_1 > 0:
                 #     self.gateway.on_tick(copy(tick))
+
+                # TODO: when reset tick volume?
             elif topics['topic'] == "orderbook":
                 '''
                 "topic": {
@@ -1350,6 +1402,8 @@ class LoopringDataWebsocketApi(WebsocketClient):
 
                 decimals = self.gateway.rest_api.contracts[market].decimals
                 tick = self.ticks[market]
+                # re-init entries, for now loopring does not need to support >5 depth
+                # tricky: bid is ascend sorted, somehow counter-intuition.
                 if len(bids) > 0:
                     for n in range(len(bids), 0, -1):
                         price = bids[n-1][0]
@@ -1382,6 +1436,3 @@ class LoopringDataWebsocketApi(WebsocketClient):
         if "ping" == data:
             return data
         return ujson.loads(data)
-
-    def _ping(self):
-        pass
