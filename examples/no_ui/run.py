@@ -36,7 +36,7 @@ loopring_dex_setting = {
 
 algo_trading_setting = {
     "template_name": "LiquidMiningAlgo",
-    "vt_symbol": "LRC-USDT.LOOPRING",
+    "vt_symbol": "LRC-USDT.LOOPRINGV36",
     "price_offset": 0.05,
     "price_offset_max": 0.1,
     "volume": 3,
@@ -46,12 +46,12 @@ algo_trading_setting = {
     "min_order_volume": 0,
     "sell_max_volume": 0,
     "buy_max_volume": 0,
-    "auto_trade_volume": 310,
+    "auto_trade_volume": 500,
     "sell_max_ratio": 1,
     "buy_max_ratio": 1,
     "reward_ratio": 0.01,
-    "min_pos": -50000,
-    "max_pos": 50000,
+    "min_pos": -500000,
+    "max_pos": 500000,
     "enable_ioc": False,
     "ioc_interval": 2,
     "hedge_enable": False
@@ -86,7 +86,7 @@ def run_child_algo():
     algo_engine.init_engine()
     main_engine.write_log("ALGO策略初始化完成")
 
-    sleep(50)
+    sleep(30)
     algo_engine.start_algo(algo_trading_setting)
     main_engine.write_log(f"Algo [{algo_trading_setting['template_name']}] 启动")
 
